@@ -160,3 +160,59 @@ ORDER BY App_Created_Dt DESC))
 -- WHERE lower(d.description) like '% inquiry_data.person_name.audit_fields.message %' 
 -- -- WHERE d.description LIKE '%subcode 5%' OR d.description LIKE '%subcode 25%' OR d.description LIKE '%subcode 13%' OR d.description LIKE '%subcode 14%' OR d.description LIKE '%subcode 27%' 
 -- ORDER BY application_uuid.value
+
+
+
+-- CLTV TEST 
+WITH F AS (
+SELECT *, 
+  CASE
+  WHEN T_AVM_Value < 100000 THEN  T_AVM_Value *0.5
+  WHEN T_AVM_Value >= 100000 AND  IFNULL(avm_fsd, prequal_avm_fsd) <= 13 THEN  T_AVM_Value
+  WHEN T_AVM_Value >= 100000 AND  IFNULL(avm_fsd, prequal_avm_fsd) >13  THEN T_AVM_Value *(1-  IFNULL(avm_fsd, prequal_avm_fsd)/200)
+  END AS T_Adjusted_Collateral_Value,
+FROM (
+SELECT
+  la.create_timestamp AS App_Created_Dt,
+  s.application_uuid.value AS App_UUID,
+  
+--   CASE 
+--   WHEN lp.property_status = 'NoneFound' THEN 'YES' ELSE 'NO' END AS AVM_Knockout,
+--   CASE 
+--   WHEN lp.land_use_code NOT IN(102,112,148,163) THEN 'YES' ELSE 'NO' END AS Land_Use_Code_Knockout,
+--   CASE 
+--   WHEN lp.acres > 20 THEN 'YES' ELSE 'NO' END AS Acres_Knockout,
+--   lp.last_market_sale_date,
+--   CASE
+--   WHEN DATE_DIFF(CURRENT_DATE(), CAST(lp.last_market_sale_date AS DATE), day) <= 90 THEN 'YES' ELSE 'NO' END AS Last_Sale_Date_Knockout, 
+--   la.credit_soft_fico AS FICO,
+--   la.status  AS App_Status,
+--   la.uw_decision_decision AS UW_Decision,
+--   la.adverse_action_declineReasons AS Decline_Reasons,
+--   s.lien_summary.involuntary_lien.lien_on_property AS Involuntary_Lien_On_Property, 
+--   s.lien_summary.hoa_lien.lien_on_property AS HOA_Lien_On_Property,
+--   il.involuntary_lien_info.involuntary_lien_item.document_category AS Document_Category, 
+--   il.involuntary_lien_info.involuntary_lien_item.document_description AS Document_Description, 
+--   CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) AS Document_Date,
+--   CURRENT_DATE() AS Current_Date,
+--   il.involuntary_lien_info.state_code AS State_Code, 
+--   s.property_status_indicators.is_pace_lien AS Is_Pace_Lien,
+  lp.avm_value_amount ,
+  sud.uw_packet_home_amount,
+  CASE 
+  WHEN lp.avm_value_amount IS NULL OR (lp.avm_value_amount >= sud.uw_packet_home_amount) THEN  sud.uw_packet_home_amount ELSE lp.avm_value_amount END AS T_AVM_Value,
+  lp.avm_fsd, 
+  lp.prequal_avm_fsd,
+  la.uw_packet_amt_owed,
+  la.adjusted_home_amount, 
+FROM `figure-production.reporting.lkup_datatree_summary` s
+JOIN `figure-production.reporting.lkup_datatree_involuntary_liens` il ON il.application_uuid.value = s.application_uuid.value
+JOIN `figure-production.reporting.lkup_application` la ON la.application_uuid_value = s.application_uuid.value
+JOIN `figure-production.reporting.lkup_property` lp ON lp.identity_uuid_value = s.identity_uuid.value
+JOIN `figure-production.rpt_staging.stg_uw_decision` sud ON sud.identity_uuid_value = s. identity_uuid.value
+))
+SELECT * FROM F
+WHERE  ROUND(adjusted_home_amount,0) !=  ROUND(T_Adjusted_Collateral_Value,0)
+
+SELECT avm_value_amount  FROM  `figure-production.reporting.lkup_property`
+where identity_uuid_value = 'b0d84349-b623-4b61-8476-ca09c5fb4a60'
