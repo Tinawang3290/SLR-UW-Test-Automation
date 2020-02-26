@@ -3,7 +3,7 @@
 WITH Credit AS (
 SELECT 
   CASE 
-  WHEN (CAST(uw_packet_credit_score AS FLOAT6) <= 620 AND CAST(uw_packet_credit_score AS FLOAT6) > 850) OR CAST(uw_packet_credit_score AS FLOAT6) IN (9000,9001,9002,9003) THEN 'YES'
+  WHEN (CAST(uw_packet_credit_score AS FLOAT64) <= 620 AND CAST(uw_packet_credit_score AS FLOAT64) > 850) OR CAST(uw_packet_credit_score AS FLOAT6) IN (9000,9001,9002,9003) THEN 'YES'
   ELSE 'NO'
   END AS FICO_Knockout,
   CASE 
