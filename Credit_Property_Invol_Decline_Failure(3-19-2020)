@@ -1,4 +1,3 @@
-
 WITH Credit AS (
 SELECT  
   * 
@@ -22,7 +21,7 @@ SELECT
   CAST(subcode AS FLOAT64) AS FACTA_Subcode, 
   d.description AS Experian_Message,
   CASE 
-  WHEN (CAST(la.credit_soft_fico AS FLOAT64) < 620 AND CAST(la.credit_soft_fico AS FLOAT64) > 850) OR CAST(uw_packet_credit_score AS FLOAT64) IN (9000,9001,9002,9003) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'FICO_Knockout_Failure'
+  WHEN (((CAST(la.credit_soft_fico AS FLOAT64) < 620 AND CAST(create_timestamp AS DATE) <= '2020-03-20') OR (CAST(la.credit_soft_fico AS FLOAT64) < 640 AND CAST(create_timestamp AS DATE) > '2020-03-20')) AND CAST(la.credit_soft_fico AS FLOAT64) > 850) OR CAST(uw_packet_credit_score AS FLOAT64) IN (9000,9001,9002,9003) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'FICO_Knockout_Failure'
   WHEN MTA2126 > 0 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Delinquent_30mdy_6mo_Knockout_Failure' 
   WHEN COL3211 > 0 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Non_Medical_Collections_Knockout_Failure'
   WHEN ALM6270 >= 60 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Worst_Trade_Status_12mo_non_medical_Knockout_Failure'
@@ -59,7 +58,7 @@ SELECT
   lp.current_transfer_sale_date,
   lp.last_market_sale_date,
   CASE WHEN CAST(ad.prequal_avm_amount AS FLOAT64) IS NULL AND CAST(ad.avm_value_amount AS FLOAT64) IS NULL THEN 'AVM_Knockout'
-  WHEN lp.land_use_code NOT IN(102,112,148,163) THEN 'Land_Use_Code_Knockout'
+  WHEN (lp.land_use_code NOT IN(102,112,148,163) AND c.App_Start_Date <= '2020-03-20') OR (lp.land_use_code NOT IN(102,112,163) AND c.App_Start_Date >'2020-03-20') THEN 'Land_Use_Code_Knockout'
   WHEN lp.acres > 20 THEN 'Acres_Knockout'
   WHEN DATE_DIFF(CURRENT_DATE(), SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE), day) <= 90 THEN 'Last_Sale_Date_Knockout'
   WHEN h.mortgage_status_indicator IN ('F','U') AND h.mortgage_payoff_date IS NULL 
