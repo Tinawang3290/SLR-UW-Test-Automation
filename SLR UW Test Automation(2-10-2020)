@@ -1,8 +1,10 @@
+
+
 WITH F0 AS (
 SELECT * FROM(
   SELECT  
   s.application_uuid.value AS Application_UUID_Value,
-  app_start_date AS App_Created_Dt,
+  CASE WHEN DATE(app_start_date) = '2020-03-26' THEN sla.kafka_timestamp_ts ELSE app_start_date END AS App_Created_Dt,
   sla.event_completed AS App_Status,   
   s.decision AS UW_Decision,
   d.code AS Decline_Code, 
@@ -19,29 +21,38 @@ SELECT * FROM(
   (ALL9221 <= 84 OR ALL9120 > (ALL9121 + ALL9122)) AS BANKRUPTCY_Rejection,
   ((COL5064 + COL5067 + COL5068 + COL5069) > 500) AS COLLECTIONS_Rejection,
   ALL5361 > 1500 AS MAJOR_DEROGATORY_Rejection, 
+  
   CAST(uw_packet.revolving_credit_card_debt.amount AS FLOAT64) AS Revolving_Credit_Card_Debt,  
  (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) AS Z,
   ROUND(CAST(uw_packet.total_revolving_debt.amount AS FLOAT64),4) AS Total_Revolving_Debt, 
   CASE 
-  WHEN BCC5830 <= BCX5830 AND uw_packet.credit_score BETWEEN 680 AND 739 THEN  ROUND(( (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) + (BAX5030 - BCX5030)*0.025 + RTR5030 * 0.025), 4)
+  WHEN  BCC5830 <= BCX5830 AND uw_packet.credit_score BETWEEN 680 AND 739 THEN  ROUND(( (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) + (BAX5030 - BCX5030)*0.025 + RTR5030 * 0.025), 4)
   WHEN BCC5830 <= BCX5830 AND uw_packet.credit_score >= 740 THEN ROUND( (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) + RTR5030 * 0.025, 4)
   END AS T_Monthly_Revolving_Debt,
+  
   CAST(uw_packet.total_installment_debt.amount AS FLOAT64) AS Total_Installment_Debt,
+  
   CASE 
   WHEN BCC5830 <= BCX5830 AND uw_packet.credit_score BETWEEN 680 AND 739 THEN ROUND(ILN5820 -ILN5824, 4)
   WHEN BCC5830 <= BCX5830 AND uw_packet.credit_score >= 740 THEN ROUND( AUA5820 + STU5020*0.0035 + (ILN5820 - (STU5820 + AUA5820)) - ILN5824,4)
   END AS T_Monthly_Installment_Debt,
+  
   CAST(uw_packet.total_mortgage_debt.amount AS FLOAT64) AS Total_Mortgage_Debt,  
   CASE 
   WHEN BCC5830 <= BCX5830 AND uw_packet.credit_score BETWEEN 680 AND 739 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
   WHEN BCC5830 <= BCX5830 AND uw_packet.credit_score >= 740 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
   END AS T_Monthly_Mortgage_Debt,  
+  
   CAST(uw_packet.msa_housing_expense.amount AS FLOAT64) AS MSA_Housing_Expense, 
   CAST(uw_packet.housing_expense.amount AS FLOAT64) AS Housing_Expense, 
+ 
   CASE 
-  WHEN MTX5839 > 0 THEN MTX5839
+  WHEN MTX5839 > 0 AND DATE(App_start_Date) >= '2020-01-17' AND DATE(App_start_Date) < '2020-03-26' OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-17') THEN MTX5839
+  WHEN MTX5839 > 0 AND MTJ0416 > 0 AND DATE(App_start_Date) < '2020-01-17'  OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts < '2020-01-17') THEN MTX5839*0.5
+  WHEN MTX5839 > 0  AND DATE(App_start_Date) < '2020-01-17'  OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts < '2020-01-17') THEN MTX5839
   ELSE CAST(uw_packet.msa_housing_expense.amount AS FLOAT64)
   END AS T_Housing_Expense,
+  
   CAST(uw_packet.retirement_income.amount AS FLOAT64) AS Retirement_Income,
   CAST(uw_packet.investment_income.amount AS FLOAT64) AS Investment_Income,
   CAST(uw_packet.savings_income.amount AS FLOAT64) AS Savings_Income,
@@ -70,7 +81,7 @@ SELECT * FROM(
   CAST(o.stated_monthly_income.amount AS FLOAT64) AS Offer_Stated_Monthly_Income, 
   CAST(o.verified_monthly_asset_depletion.amount AS FLOAT64) AS Offer_Verified_Monthly_Asset_Depletion, 
   CAST(o.verified_monthly_income.amount AS FLOAT64) AS Offer_Verified_Montly_Income, 
-  CAST(o.term AS FLOAT64) AS Offer_Term,
+  CAST(O.term AS FLOAT64) AS Offer_Term,
   CAST(o.int_rate.value AS FLOAT64) AS Offer_Autopay_Rate,
   CAST(o.non_autopay_int_rate.value AS FLOAT64) AS Offer_Non_Autopay_Rate,
   CAST(O.pre_loan_dti.value AS FLOAT64) AS Offer_Pre_Loan_DTI,
@@ -82,10 +93,18 @@ SELECT * FROM(
   WHEN AUT5820 > 0 THEN AUT5820 + 200
   ELSE 350
   END AS T_Transportation_Expense,
+  
   CAST(uw_packet.bureau_debt.amount AS FLOAT64) AS Bureau_Debt,
-  (ALL5830  - MTA5830  - STU5820) AS T_Additional_Bureau_Debt, 
+  
+  CASE 
+  WHEN DATE(App_start_Date) >= '2020-01-24' AND DATE(App_start_Date) < '2020-03-26' OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-24') THEN (ALL5830  - MTA5830  - STU5820)
+  WHEN DATE(App_start_Date) >= '2020-01-17' AND  DATE(App_start_Date) < '2020-01-24' OR (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-17' AND sla.kafka_timestamp_ts < '2020-01-24') THEN (ALL5830 - MTA5830 - AUT5820 - STU5820)
+  ELSE (ALL5830 - MTX5839 - AUT5820)
+  END AS T_Additional_Bureau_Debt,
+  
   CAST(uw_packet.amt_to_refi.amount AS FLOAT64) AS Amt_To_Refi,
   CAST(amount_to_borrow.amount AS FLOAT64) AS Amt_To_Borrow,
+  loan_amount_requested AS Amt_Requested,
   CAST(uw_packet.total_bureau_reported_sl_balance.amount AS FLOAT64) AS Total_Bureau_Reported_SL_Balance,
   uw_packet.origination_state AS Origination_State,
   uw_packet.zip_code AS Zip_Code,
@@ -103,6 +122,7 @@ LEFT JOIN UNNEST(decline_reasons) AS D
 ORDER BY s.kafka_timestamp_ts DESC
 ) 
 WHERE R = 1),
+
 
 F1 AS (
 SELECT 
@@ -123,8 +143,9 @@ SELECT
   END AS T_Monthly_Debt, 
   CASE
   WHEN (CREDIT_SCORE_Rejection IS TRUE OR MAXIMUM_DTI_Rejection IS TRUE OR INQ3MONTHS_Rejection IS TRUE OR THIN_FILE_Rejection IS TRUE OR STUDENT_LOANS_Rejection IS TRUE OR NEW_CREDIT_TRADES_RATIO_Rejection IS TRUE OR INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection IS TRUE OR BANKRUPTCY_Rejection IS TRUE OR COLLECTIONS_Rejection IS TRUE OR MAJOR_DEROGATORY_Rejection IS TRUE) THEN  'True'
-  END AS Credit_Hard_Knock_Outs,
+  END AS T_Credit_Hard_Knock_Outs,
   CASE 
+  WHEN (Amt_To_Borrow > 250000 or Amt_To_Borrow < 5000) AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'Loan_Size_Rejection_Failure'
   WHEN CREDIT_SCORE_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'CREDIT_SCORE_Rejection_Failure'
   WHEN MAXIMUM_DTI_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'MAXIMUM_DTI_Rejection_Failure'
   WHEN INQ3MONTHS_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'INQ3MONTHS_Rejection_Failure'
@@ -135,19 +156,25 @@ SELECT
   WHEN BANKRUPTCY_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'BANKRUPTCY_Rejection_Failure'
   WHEN COLLECTIONS_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'COLLECTIONS_Rejection_Failure'
   WHEN MAJOR_DEROGATORY_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'MAJOR_DEROGATORY_Rejection_Failure'
-  END AS Credit_Hard_Knock_Outs_Failure,
+  ELSE 'Pass'
+  END AS T_Credit_Hard_Knock_Outs_Failure,
 
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
-  ELSE ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense- T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
   END AS T_Pre_Loan_FCF,
+  
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
-  ELSE ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24'  THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3)),3)
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
   END AS T_Offer_Post_Loan_FCF, 
+  
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
-  ELSE ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense  - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense  - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
   END AS T_Selected_Post_Loan_FCF 
 FROM F0),
 
@@ -169,91 +196,165 @@ SELECT
   BANKRUPTCY_Rejection,
   COLLECTIONS_Rejection,
   MAJOR_DEROGATORY_Rejection,
-  Credit_Hard_Knock_Outs,
-  Credit_Hard_Knock_Outs_Failure,
+  T_Credit_Hard_Knock_Outs,
+  T_Credit_Hard_Knock_Outs_Failure,
   Revolving_Credit_Card_Debt,
   Z,
-  (Z = Revolving_Credit_Card_Debt) AS Credit_Card_Debt_Match,
+  CASE 
+  WHEN Z = Revolving_Credit_Card_Debt THEN 'Match'
+  WHEN Z != Revolving_Credit_Card_Debt THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Credit_Card_Debt_Match,
+  
   Total_Revolving_Debt,
   T_Monthly_Revolving_Debt,
-  (Total_Revolving_Debt = T_Monthly_Revolving_Debt) AS Total_Revolving_Debt_Match,
+  
+  CASE 
+  WHEN Total_Revolving_Debt = T_Monthly_Revolving_Debt THEN 'Match' 
+  WHEN Total_Revolving_Debt != T_Monthly_Revolving_Debt THEN 'Unmatch' 
+  ELSE 'Unavailable'
+  END AS Total_Revolving_Debt_Match,
+  
   Total_Installment_Debt,
   T_Monthly_Installment_Debt,
-  (Total_Installment_Debt = T_Monthly_Installment_Debt) AS Total_Installment_Debt_Match,
+  CASE 
+  WHEN Total_Installment_Debt = T_Monthly_Installment_Debt THEN 'Match'
+  WHEN Total_Installment_Debt != T_Monthly_Installment_Debt THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Total_Installment_Debt_Match,
+  
   Total_Mortgage_Debt,
   T_Monthly_Mortgage_Debt, 
-  (Total_Mortgage_Debt = T_Monthly_Mortgage_Debt) AS Total_Mortgage_Debt_Match,
+  
+  CASE 
+  WHEN Total_Mortgage_Debt = T_Monthly_Mortgage_Debt THEN 'Match'
+  WHEN Total_Mortgage_Debt != T_Monthly_Mortgage_Debt THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Total_Mortgage_Debt_Match,
+  
   Transportation_Expense,
   T_Transportation_Expense,
-  (Transportation_Expense = T_Transportation_Expense) AS Transportation_Expense_Match,
+  CASE
+  WHEN Transportation_Expense = T_Transportation_Expense THEN 'Match'
+  WHEN Transportation_Expense != T_Transportation_Expense THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Transportation_Expense_Match,
+  
   Bureau_Debt,
   T_Additional_Bureau_Debt,
-  (Bureau_Debt = T_Additional_Bureau_Debt) AS Bureau_Debt_Match,
+  
+  CASE 
+  WHEN Bureau_Debt = T_Additional_Bureau_Debt THEN 'Match'
+  WHEN Bureau_Debt != T_Additional_Bureau_Debt THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Bureau_Debt_Match,
+  
   Housing_Expense,
   T_Housing_Expense,
-  (Housing_Expense = T_Housing_Expense) AS Housing_Expense_Match,
+  
+  CASE 
+  WHEN Housing_Expense = T_Housing_Expense THEN 'Match'
+  WHEN Housing_Expense != T_Housing_Expense THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Housing_Expense_Match,
+  
   Stated_Monthly_Income,
   Offer_Verified_Montly_Income,
+  calc_income,
   Monthly_Debt,
   T_Monthly_Debt,  
-  (ROUND(Monthly_Debt,0) = ROUND(T_Monthly_Debt,0)) AS Monthly_Debt_Match,
+  
+  CASE 
+  WHEN ROUND(Monthly_Debt,0) = ROUND(T_Monthly_Debt,0) THEN 'Match'
+  WHEN ROUND(Monthly_Debt,0) != ROUND(T_Monthly_Debt,0) THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Monthly_Debt_Match,
+  
   Total_Bureau_Reported_SL_Balance,
   STU5020,
   Amt_To_Refi,  
   Amt_To_Borrow,
-  Selected_Amount,
+  Amt_Requested,
   Selected_Term_Month,
   Current_Student_Loan_Payment,
   T_Pre_Refi_Student_Loan_Payment_Bureau,
   T_Pre_Refi_Student_Loan_Payment_Req,
-  (ROUND(Current_Student_Loan_Payment,0) =  ROUND(T_Pre_Refi_Student_Loan_Payment_Req,0)) AS Pre_Refi_Student_Loan_Payment_Req_Match,  
+  CASE 
+  WHEN ROUND(Current_Student_Loan_Payment,0) =  ROUND(T_Pre_Refi_Student_Loan_Payment_Req,0) THEN 'Match'
+  WHEN ROUND(Current_Student_Loan_Payment,0) !=  ROUND(T_Pre_Refi_Student_Loan_Payment_Req,0) THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Pre_Refi_Student_Loan_Payment_Req_Match,  
+  
   T_Offer_Post_Refi_Student_Loan_Payment_Bureau,
   T_Offer_Post_Refi_Student_Loan_Payment_Req,
   T_Offer_Post_Refi_Student_Loan_Payment, 
   T_Selected_Post_Refi_Student_Loan_Payment_Bureau,
   T_Selected_Post_Refi_Student_Loan_Payment_Req,
   Pre_Loan_DTI,  
+  
   CASE 
   WHEN (Offer_Verified_Montly_Income = 0 OR Offer_Verified_Montly_Income > Stated_Monthly_Income) THEN ROUND(T_Monthly_Debt / Stated_Monthly_Income, 4) 
   ELSE ROUND(T_Monthly_Debt / Offer_Verified_Montly_Income, 4)
-  END AS T_Pre_Loan_DTI,  
-  (Pre_Loan_DTI = ROUND(T_Monthly_Debt /Stated_Monthly_Income, 4)) AS Pre_Loan_DTI_Match,
+  END AS T_Pre_Loan_DTI,
+ 
   CASE 
-  WHEN (Credit_Hard_Knock_Outs != 'True') AND (T_Monthly_Debt/Stated_Monthly_Income) > 0.65  THEN 'DTI' 
-  END AS T_Pre_Loan_DTI_Decline,
+  WHEN Pre_Loan_DTI = ROUND(T_Monthly_Debt/Calc_Income, 4) THEN 'Match'
+  WHEN Pre_Loan_DTI != ROUND(T_Monthly_Debt/Calc_Income, 4) THEN 'Unmatch'
+  ELSE 'Unavailble'
+  END AS Pre_Loan_DTI_Match,
+  
+  CASE 
+  WHEN (T_Credit_Hard_Knock_Outs != 'True') AND (T_Monthly_Debt/Stated_Monthly_Income) > 0.65 AND UW_Decision != 'DECLINE' AND App_status NOT IN ('Cancelled','Declined')  THEN 'Pre_Loan_DTI_Decline_Failure' 
+  ELSE 'Pass'
+  END AS T_Pre_Loan_DTI_Decline_Failure,
+  
   Offer_Term,
   Offer_Autopay_Rate,
   Offer_Non_Autopay_Rate,
   Offer_Pre_Loan_DTI,
   Offer_Pre_Loan_Cashflow,
   T_Pre_Loan_FCF,
-  ROUND(Offer_Pre_Loan_Cashflow, 0) = ROUND(T_Pre_Loan_FCF,0) AS Pre_Loan_FCF_Match,
+  
+  CASE 
+  WHEN ROUND(Offer_Pre_Loan_Cashflow, 0) = ROUND(T_Pre_Loan_FCF,0) THEN 'Match'
+  WHEN ROUND(Offer_Pre_Loan_Cashflow, 0) != ROUND(T_Pre_Loan_FCF,0) THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Pre_Loan_FCF_Match,
+  
   Offer_Post_Loan_DTI,
   Offer_Post_Loan_Cashflow,
   T_Offer_Post_Loan_FCF,
-  ROUND(Offer_Post_Loan_Cashflow,0) = ROUND(T_Offer_Post_Loan_FCF,0) AS Post_Loan_FCF_Match,
+  
+  CASE 
+  WHEN ROUND(Offer_Post_Loan_Cashflow,0) = ROUND(T_Offer_Post_Loan_FCF,0) THEN 'Match'
+  WHEN ROUND(Offer_Post_Loan_Cashflow,0) != ROUND(T_Offer_Post_Loan_FCF,0) THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS Post_Loan_FCF_Match,
+  
   Selected_Term,
   Selected_Initial_Rate,
   Selected_Post_Loan_DTI,
   Selected_Post_Loan_Cashflow,
   T_Selected_Post_Loan_FCF,
-  CASE 
-  WHEN (Credit_Hard_Knock_Outs IS NULL ) AND ((T_Monthly_Debt/Stated_Monthly_Income) <= 0.65 OR (T_Monthly_Debt/Stated_Monthly_Income) IS NULL) AND T_Offer_Post_Loan_FCF < 1500 THEN 'FCF'
-  END AS FCF_Decline,
-  CASE 
-  WHEN (Credit_Hard_Knock_Outs IS NULL) AND ((T_Monthly_Debt/Stated_Monthly_Income) <= 0.65 OR (T_Monthly_Debt/Stated_Monthly_Income) IS NULL) AND T_Offer_Post_Loan_FCF > 1500 
-  AND UW_Decision = 'DECLINE' THEN  'Apps should not have been declined, while declined'
   
-  END AS UW_False_Decline
+  CASE 
+  WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF < 1500 AND UW_Decision != 'DECLINE' AND App_status NOT IN ('Cancelled','Declined')  THEN 'Post_Loan_FCF_Decline_Failure'
+  ELSE 'Pass'
+  END AS T_FCF_Decline_Failure,
+  
+  CASE 
+  WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF > 1500 
+  AND UW_Decision = 'DECLINE' AND Decline_code NOT IN ('FRAUD')  THEN  'Apps should not have been declined, while declined'
+  ELSE 'Pass'
+  END AS T_UW_False_Decline
+  
 FROM F1
-Order by 	App_Created_Dt DESC
+Order by 	App_Created_Dt DESC 
 )
 SELECT 
   *
--- DISTINCT(Application_UUID_Value), App_Created_Dt, App_Status, UW_Decision
 FROM F2
-WHERE UW_Decision = 'DECLINE'
--- AND 
---FCF_Decline = 'FCF'
--- Credit_Hard_Knock_Outs_Failure IS NOT NULL
--- ORDER BY App_Created_Dt DESC
+WHERE (T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass') 
+-- AND APP_STATUS = 'Loan Funded'
+-- AND application_uuid_value = '21e84c73-4d84-4f31-a520-31df209eee08'
+
