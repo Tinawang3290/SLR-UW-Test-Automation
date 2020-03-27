@@ -1,8 +1,16 @@
+-- SELECT 
+--   application_uuid_value, 
+--   kafka_timestamp_ts,
+--   app_start_date
+-- FROM reporting.lkup_slr_application
+-- WHERE DATE(app_start_date) = '2020-03-26'
+-- ORDER BY app_start_date DESC
+
 WITH F0 AS (
 SELECT * FROM(
   SELECT  
   s.application_uuid.value AS Application_UUID_Value,
-  app_start_date AS App_Created_Dt,
+  CASE WHEN DATE(app_start_date) = '2020-03-26' THEN sla.kafka_timestamp_ts ELSE app_start_date END AS App_Created_Dt,
   sla.event_completed AS App_Status,   
   s.decision AS UW_Decision,
   d.code AS Decline_Code, 
@@ -43,7 +51,7 @@ SELECT * FROM(
   
   CAST(uw_packet.msa_housing_expense.amount AS FLOAT64) AS MSA_Housing_Expense, 
   CAST(uw_packet.housing_expense.amount AS FLOAT64) AS Housing_Expense, 
-  
+ 
   CASE 
   WHEN MTX5839 > 0 THEN MTX5839
   ELSE CAST(uw_packet.msa_housing_expense.amount AS FLOAT64)
@@ -95,6 +103,7 @@ SELECT * FROM(
   
   CAST(uw_packet.amt_to_refi.amount AS FLOAT64) AS Amt_To_Refi,
   CAST(amount_to_borrow.amount AS FLOAT64) AS Amt_To_Borrow,
+  loan_amount_requested AS Amt_Requested,
   CAST(uw_packet.total_bureau_reported_sl_balance.amount AS FLOAT64) AS Total_Bureau_Reported_SL_Balance,
   uw_packet.origination_state AS Origination_State,
   uw_packet.zip_code AS Zip_Code,
@@ -134,6 +143,7 @@ SELECT
   WHEN (CREDIT_SCORE_Rejection IS TRUE OR MAXIMUM_DTI_Rejection IS TRUE OR INQ3MONTHS_Rejection IS TRUE OR THIN_FILE_Rejection IS TRUE OR STUDENT_LOANS_Rejection IS TRUE OR NEW_CREDIT_TRADES_RATIO_Rejection IS TRUE OR INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection IS TRUE OR BANKRUPTCY_Rejection IS TRUE OR COLLECTIONS_Rejection IS TRUE OR MAJOR_DEROGATORY_Rejection IS TRUE) THEN  'True'
   END AS T_Credit_Hard_Knock_Outs,
   CASE 
+  WHEN (Amt_To_Borrow > 250000 or Amt_To_Borrow < 5000) AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'Loan_Size_Rejection_Failure'
   WHEN CREDIT_SCORE_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'CREDIT_SCORE_Rejection_Failure'
   WHEN MAXIMUM_DTI_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'MAXIMUM_DTI_Rejection_Failure'
   WHEN INQ3MONTHS_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'INQ3MONTHS_Rejection_Failure'
@@ -256,7 +266,7 @@ SELECT
   STU5020,
   Amt_To_Refi,  
   Amt_To_Borrow,
-  Selected_Amount,
+  Amt_Requested,
   Selected_Term_Month,
   Current_Student_Loan_Payment,
   T_Pre_Refi_Student_Loan_Payment_Bureau,
@@ -331,10 +341,15 @@ SELECT
   END AS T_UW_False_Decline
   
 FROM F1
-WHERE DATE(App_Created_Dt) >= '2020-01-24'
+WHERE DATE(App_Created_Dt) >= '2020-01-24' 
 Order by 	App_Created_Dt DESC 
 )
 SELECT 
   *
 FROM F2
-WHERE Application_uuid_value IN ('9679f32a-a070-47ee-8ad2-49873fe5b45e', '5a0711ec-b8eb-47c8-8e6d-000dfe929aee','0df49e4d-8d65-4664-9caa-7119a76a35d6','1e12707b-0e4f-4d70-8112-049dd4be84fd')
+WHERE T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass'
+
+
+-- CAST(loan_amount_requested AS FLOAT64) > 250000 OR CAST(loan_amount_requested AS FLOAT64)  < 5000
+-- WHERE Application_uuid_value IN ('9679f32a-a070-47ee-8ad2-49873fe5b45e', '5a0711ec-b8eb-47c8-8e6d-000dfe929aee','0df49e4d-8d65-4664-9caa-7119a76a35d6','1e12707b-0e4f-4d70-8112-049dd4be84fd')
+
