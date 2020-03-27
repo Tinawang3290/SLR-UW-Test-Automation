@@ -1,10 +1,4 @@
--- SELECT 
---   application_uuid_value, 
---   kafka_timestamp_ts,
---   app_start_date
--- FROM reporting.lkup_slr_application
--- WHERE DATE(app_start_date) = '2020-03-26'
--- ORDER BY app_start_date DESC
+
 
 WITH F0 AS (
 SELECT * FROM(
@@ -84,7 +78,7 @@ SELECT * FROM(
   CAST(o.stated_monthly_income.amount AS FLOAT64) AS Offer_Stated_Monthly_Income, 
   CAST(o.verified_monthly_asset_depletion.amount AS FLOAT64) AS Offer_Verified_Monthly_Asset_Depletion, 
   CAST(o.verified_monthly_income.amount AS FLOAT64) AS Offer_Verified_Montly_Income, 
-  CAST(o.term AS FLOAT64) AS Offer_Term,
+  CAST(O.term AS FLOAT64) AS Offer_Term,
   CAST(o.int_rate.value AS FLOAT64) AS Offer_Autopay_Rate,
   CAST(o.non_autopay_int_rate.value AS FLOAT64) AS Offer_Non_Autopay_Rate,
   CAST(O.pre_loan_dti.value AS FLOAT64) AS Offer_Pre_Loan_DTI,
@@ -99,7 +93,11 @@ SELECT * FROM(
   
   CAST(uw_packet.bureau_debt.amount AS FLOAT64) AS Bureau_Debt,
   
-  (ALL5830  - MTA5830  - STU5820) AS T_Additional_Bureau_Debt,
+  CASE 
+  WHEN DATE(App_start_Date) >= '2020-01-24' AND DATE(App_start_Date) < '2020-03-26' OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-24') THEN (ALL5830  - MTA5830  - STU5820)
+  WHEN DATE(App_start_Date) >= '2020-01-17' AND  DATE(App_start_Date) < '2020-01-24' OR (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-17' AND sla.kafka_timestamp_ts < '2020-01-24') THEN (ALL5830 - MTA5830 - AUT5820 - STU5820)
+  ELSE (ALL5830 - MTX5839 - AUT5820)
+  END AS T_Additional_Bureau_Debt,
   
   CAST(uw_packet.amt_to_refi.amount AS FLOAT64) AS Amt_To_Refi,
   CAST(amount_to_borrow.amount AS FLOAT64) AS Amt_To_Borrow,
@@ -121,6 +119,7 @@ LEFT JOIN UNNEST(decline_reasons) AS D
 ORDER BY s.kafka_timestamp_ts DESC
 ) 
 WHERE R = 1),
+
 
 F1 AS (
 SELECT 
@@ -158,16 +157,21 @@ SELECT
   END AS T_Credit_Hard_Knock_Outs_Failure,
 
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
-  ELSE ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense- T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)),3)
   END AS T_Pre_Loan_FCF,
+  
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
-  ELSE ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24'  THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3)),3)
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
   END AS T_Offer_Post_Loan_FCF, 
+  
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
-  ELSE ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense  - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense  - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
   END AS T_Selected_Post_Loan_FCF 
 FROM F0),
 
@@ -341,15 +345,10 @@ SELECT
   END AS T_UW_False_Decline
   
 FROM F1
-WHERE DATE(App_Created_Dt) >= '2020-01-24' 
 Order by 	App_Created_Dt DESC 
 )
 SELECT 
   *
 FROM F2
-WHERE T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass'
-
-
--- CAST(loan_amount_requested AS FLOAT64) > 250000 OR CAST(loan_amount_requested AS FLOAT64)  < 5000
--- WHERE Application_uuid_value IN ('9679f32a-a070-47ee-8ad2-49873fe5b45e', '5a0711ec-b8eb-47c8-8e6d-000dfe929aee','0df49e4d-8d65-4664-9caa-7119a76a35d6','1e12707b-0e4f-4d70-8112-049dd4be84fd')
+WHERE (T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass') AND application_uuid_value = '21e84c73-4d84-4f31-a520-31df209eee08'
 
