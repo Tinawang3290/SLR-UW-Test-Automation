@@ -1,5 +1,3 @@
-
-
 WITH F0 AS (
 SELECT * FROM(
   SELECT  
@@ -47,47 +45,32 @@ SELECT * FROM(
   CAST(uw_packet.housing_expense.amount AS FLOAT64) AS Housing_Expense, 
  
   CASE 
-  WHEN MTX5839 > 0 AND DATE(App_start_Date) >= '2020-01-17' AND DATE(App_start_Date) < '2020-03-26' OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-17') THEN MTX5839
-  WHEN MTX5839 > 0 AND MTJ0416 > 0 AND DATE(App_start_Date) < '2020-01-17'  OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts < '2020-01-17') THEN MTX5839*0.5
-  WHEN MTX5839 > 0  AND DATE(App_start_Date) < '2020-01-17'  OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts < '2020-01-17') THEN MTX5839
+  WHEN MTX5839 > 0 AND ((DATE(App_start_Date) >= '2020-01-17' AND DATE(app_start_date) != '2020-03-26')  OR  (DATE(app_start_date) = '2020-03-26' AND DATE(sla.kafka_timestamp_ts) >= '2020-01-17')) THEN MTX5839
+  WHEN MTX5839 > 0 AND MTJ0416 > 0 AND (DATE(App_start_Date) < '2020-01-17' OR (DATE(app_start_date) = '2020-03-26' AND DATE(sla.kafka_timestamp_ts) < '2020-01-17')) THEN MTX5839* 0.5
+  WHEN MTX5839 > 0 AND MTJ0416 <= 0 AND (DATE(App_start_Date) < '2020-01-17'  OR  (DATE(app_start_date) = '2020-03-26' AND DATE(sla.kafka_timestamp_ts) < '2020-01-17')) THEN MTX5839
   ELSE CAST(uw_packet.msa_housing_expense.amount AS FLOAT64)
   END AS T_Housing_Expense,
-  
-  CAST(uw_packet.retirement_income.amount AS FLOAT64) AS Retirement_Income,
-  CAST(uw_packet.investment_income.amount AS FLOAT64) AS Investment_Income,
-  CAST(uw_packet.savings_income.amount AS FLOAT64) AS Savings_Income,
+
   CAST(uw_packet.stated_monthly_income.amount AS FLOAT64) AS Stated_Monthly_Income,
+  CAST( sla.stated_monthly_income AS FLOAT64) AS Offer_Stated_Monthly_Income, 
+ 
   CAST(uw_packet.tax_reduction_factor.value AS FLOAT64) AS Tax_Reduction_Factor,
-  CAST(uw_packet.stated_retirement_income.amount AS FLOAT64) AS Stated_Retirement_Income, 
-  CAST(uw_packet.stated_investment_income.amount  AS FLOAT64) AS Stated_Investment_Income,
-  CAST(uw_packet.stated_savings_income.amount AS FLOAT64) AS Stated_Savings_Income,
   CAST(uw_packet.verified_monthly_income.amount AS FLOAT64) AS Verified_Monthly_Income,
-  CAST(uw_packet.verified_retirement_income.amount AS FLOAT64) AS Verified_Retirement_Income,
-  CAST(uw_packet.verified_investment_income.amount AS FLOAT64) AS Verified_Investment_Income, 
-  CAST(uw_packet.verified_savings_income.amount AS FLOAT64) AS Verified_Savings_Income,
-  CASE WHEN( CAST(uw_packet.verified_monthly_income.amount AS FLOAT64) > CAST(uw_packet.stated_monthly_income.amount AS FLOAT64) 
+  CAST( sla.verified_monthly_income_amount AS FLOAT64) AS Offer_Verified_Monthly_Income, 
+  
+  CASE 
+  WHEN( CAST(uw_packet.verified_monthly_income.amount AS FLOAT64) > CAST(uw_packet.stated_monthly_income.amount AS FLOAT64) 
   OR  CAST(uw_packet.verified_monthly_income.amount AS FLOAT64) = 0)
   THEN CAST(uw_packet.stated_monthly_income.amount AS FLOAT64) 
   ELSE CAST(uw_packet.verified_monthly_income.amount AS FLOAT64)
-  END AS Calc_Income,
-  CAST(selected_offer.term AS FLOAT64) AS Selected_Term,
-  CAST(selected_offer.term AS FLOAT64) * 12 AS Selected_Term_Month,
-  CAST(selected_offer.int_rate.value AS FLOAT64) AS Selected_Initial_Rate,
-  CAST(selected_offer.post_loan_dti.value AS FLOAT64) AS Selected_Post_Loan_DTI,
-  CAST(selected_offer.post_loan_cashflow.value AS FLOAT64 ) AS Selected_Post_Loan_Cashflow,
-  CAST(uw_packet.selected_amount.amount AS FLOAT64) AS Selected_Amount,  
-  CAST(o.monthly_income.amount AS FLOAT64) AS Offer_Monthly_Income, 
-  CAST(o.monthly_asset_depletion.amount AS FLOAT64) AS Montly_Asset_Depletion, 
-  CAST(o.stated_monthly_income.amount AS FLOAT64) AS Offer_Stated_Monthly_Income, 
-  CAST(o.verified_monthly_asset_depletion.amount AS FLOAT64) AS Offer_Verified_Monthly_Asset_Depletion, 
-  CAST(o.verified_monthly_income.amount AS FLOAT64) AS Offer_Verified_Montly_Income, 
-  CAST(O.term AS FLOAT64) AS Offer_Term,
-  CAST(o.int_rate.value AS FLOAT64) AS Offer_Autopay_Rate,
-  CAST(o.non_autopay_int_rate.value AS FLOAT64) AS Offer_Non_Autopay_Rate,
-  CAST(O.pre_loan_dti.value AS FLOAT64) AS Offer_Pre_Loan_DTI,
-  CAST(o.pre_loan_cashflow.amount AS FLOAT64) AS Offer_Pre_Loan_Cashflow,
-  CAST(o.post_loan_dti.value AS FLOAT64) AS Offer_Post_Loan_DTI,
-  CAST(o.post_loan_cashflow.amount AS FLOAT64) AS Offer_Post_Loan_Cashflow,
+  END AS Calc_Income, 
+
+  CAST( loan_term AS FLOAT64) AS Offer_Term,
+  CAST( app_rate_with_auto AS FLOAT64) AS Offer_Autopay_Rate,
+  CAST( app_rate_wo_auto AS FLOAT64) AS Offer_Non_Autopay_Rate,
+  CAST( pre_loan_free_cash_flow AS FLOAT64) AS Offer_Pre_Loan_Cashflow,
+  CAST( sla.post_loan_dti AS FLOAT64) AS Offer_Post_Loan_DTI,
+  CAST( post_loan_free_cash_flow AS FLOAT64) AS Offer_Post_Loan_Cashflow,
   CAST(uw_packet.transportation_expense.amount AS FLOAT64) AS Transportation_Expense,
   CASE
   WHEN AUT5820 > 0 THEN AUT5820 + 200
@@ -97,8 +80,8 @@ SELECT * FROM(
   CAST(uw_packet.bureau_debt.amount AS FLOAT64) AS Bureau_Debt,
   
   CASE 
-  WHEN DATE(App_start_Date) >= '2020-01-24' AND DATE(App_start_Date) < '2020-03-26' OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-24') THEN (ALL5830  - MTA5830  - STU5820)
-  WHEN DATE(App_start_Date) >= '2020-01-17' AND  DATE(App_start_Date) < '2020-01-24' OR (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-17' AND sla.kafka_timestamp_ts < '2020-01-24') THEN (ALL5830 - MTA5830 - AUT5820 - STU5820)
+  WHEN DATE(App_start_Date) >= '2020-01-24' AND DATE(App_start_Date) != '2020-03-26' OR  (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-24') THEN (ALL5830  - MTA5830_new  - STU5820)
+  WHEN DATE(App_start_Date) >= '2020-01-17' AND  DATE(App_start_Date) < '2020-01-24' OR (DATE(app_start_date) = '2020-03-26' AND sla.kafka_timestamp_ts >= '2020-01-17' AND sla.kafka_timestamp_ts < '2020-01-24') THEN (ALL5830 - MTA5830_new - AUT5820 - STU5820)
   ELSE (ALL5830 - MTX5839 - AUT5820)
   END AS T_Additional_Bureau_Debt,
   
@@ -108,39 +91,50 @@ SELECT * FROM(
   CAST(uw_packet.total_bureau_reported_sl_balance.amount AS FLOAT64) AS Total_Bureau_Reported_SL_Balance,
   uw_packet.origination_state AS Origination_State,
   uw_packet.zip_code AS Zip_Code,
-  CAST(o.pre_loan_dti.value AS FLOAT64) AS Pre_Loan_DTI,
+  CAST(sla.pre_loan_dti AS FLOAT64) AS Pre_Loan_DTI,
   ROUND(CAST(uw_packet.current_student_loan_payment.amount AS FLOAT64),3) AS Current_Student_Loan_Payment,
   ROUND(CAST(uw_packet.monthly_debt.amount AS FLOAT64),4) AS Monthly_Debt,
-  IQT9416, ALS8220, ALX8220, STU8151, STU6200, ALL0400, ALL0337, REV2326, ILN2326, MTA2326, ALL9221, ALL9120, ALL9121, ALL9122, COL5068, COL5069,ALL5830,
-  MTX5839, BCC5830, BCX5830, ALX5830, MTA5830, ILN5824, BAX5030, RTR5030, BCC5838, AUA5820, STU5020, ILN5820, STU5820, MTF5820, MTS5820, HLC5820, COL5064, ALL5361, AUT5820,
+  IQT9416, ALS8220, ALX8220, STU8151, STU6200, ALL0400, ALL0337, REV2326, ILN2326, MTA2326, ALL9221, ALL9120, ALL9121, ALL9122, COL5068, COL5069,ALL5830,BCX5030,MTA5830,
+  MTX5839, BCC5830, BCX5830, ALX5830, MTA5830_new, ILN5824, BAX5030, RTR5030, BCC5838, AUA5820, STU5020, ILN5820, STU5820, MTF5820, MTS5820, HLC5820, COL5064, ALL5361, AUT5820, MTJ0416,
   ROW_NUMBER() OVER (PARTITION BY application_uuid.value ORDER BY s.kafka_timestamp_ts DESC) AS R 
 FROM `figure-production.staging_evolved.uw_data_proto_external_decision_slr_r1` s
 JOIN `figure-production.reporting.lkup_slr_application` sla ON sla.application_uuid_value = s.application_uuid.value
-JOIN `figure-production.reporting.lkup_credit_attr` lca ON lca.application_uuid_value = s.application_uuid.value
+JOIN (SELECT *, CASE WHEN MTA5830 in(999999998, 999999996) THEN 0 ELSE MTA5830 END AS MTA5830_new FROM `reporting.lkup_credit_attr` WHERE credit_type = 'Hard Credit') lca ON lca.application_uuid_value = s.application_uuid.value
 LEFT JOIN UNNEST(offers) AS O
 LEFT JOIN UNNEST(decline_reasons) AS D
 ORDER BY s.kafka_timestamp_ts DESC
 ) 
 WHERE R = 1),
 
+-- SELECT * FROM F0
+-- WHERE application_uuid_value = 'e9d9dffd-8f31-4092-96ad-0c29d6cf72ad'
 
 F1 AS (
 SELECT 
   *,
   ROUND((STU5020 * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) AS T_Pre_Refi_Student_Loan_Payment_Bureau,
   ROUND((Amt_To_Refi * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) AS T_Pre_Refi_Student_Loan_Payment_Req,
-  ROUND((STU5020 * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) AS T_Selected_Post_Refi_Student_Loan_Payment_Bureau,
-  ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) AS T_Selected_Post_Refi_Student_Loan_Payment_Req,
-  ROUND((STU5020 * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 +  Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) AS T_Offer_Post_Refi_Student_Loan_Payment_Bureau,
-  ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) AS T_Offer_Post_Refi_Student_Loan_Payment_Req,  
+
+  CASE WHEN Offer_Non_Autopay_Rate != 0 AND offer_term != 0
+  THEN ROUND((STU5020 * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 +  Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) 
+  ELSE NULL 
+  END AS T_Offer_Post_Refi_Student_Loan_Payment_Bureau,
+  
+  CASE WHEN Offer_Non_Autopay_Rate != 0 AND offer_term != 0
+  THEN ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) 
+  ELSE NULL 
+  END AS T_Offer_Post_Refi_Student_Loan_Payment_Req,  
+--
   CASE 
-  WHEN Amt_To_Refi >= STU5020 THEN ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)
-  ELSE ROUND((STU5020 * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 +  Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) + ROUND((STU5020 * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)*(1-Amt_To_Refi/STU5020)
+  WHEN Amt_To_Refi >= STU5020 AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0 THEN ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)
+  WHEN Amt_To_Refi < STU5020 AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0  THEN ROUND((STU5020 * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 +  Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) + ROUND((STU5020 * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)*(1-Amt_To_Refi/STU5020)
+  ELSE NULL
   END AS T_Offer_Post_Refi_Student_Loan_Payment,
   CASE
   WHEN BCC5830 > BCX5830 THEN ROUND((ALX5830 - ILN5824),4)
   ELSE ROUND((T_Monthly_Revolving_Debt + T_Monthly_Installment_Debt + T_Monthly_Mortgage_Debt +  T_Housing_Expense),4)
-  END AS T_Monthly_Debt, 
+  END AS T_Monthly_Debt,
+  
   CASE
   WHEN (CREDIT_SCORE_Rejection IS TRUE OR MAXIMUM_DTI_Rejection IS TRUE OR INQ3MONTHS_Rejection IS TRUE OR THIN_FILE_Rejection IS TRUE OR STUDENT_LOANS_Rejection IS TRUE OR NEW_CREDIT_TRADES_RATIO_Rejection IS TRUE OR INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection IS TRUE OR BANKRUPTCY_Rejection IS TRUE OR COLLECTIONS_Rejection IS TRUE OR MAJOR_DEROGATORY_Rejection IS TRUE) THEN  'True'
   END AS T_Credit_Hard_Knock_Outs,
@@ -166,16 +160,12 @@ SELECT
   END AS T_Pre_Loan_FCF,
   
   CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24'  THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3)),3)
-  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
-  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
+  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0 THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3)),3)
+  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' AND Total_Bureau_Reported_SL_Balance != 0 AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0  THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3) - 
+  ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
+  WHEN DATE(App_Created_Dt) < '2020-01-24' AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0 THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
   END AS T_Offer_Post_Loan_FCF, 
   
-  CASE 
-  WHEN Amt_To_Refi >= Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
-  WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense  - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3) - ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
-  WHEN DATE(App_Created_Dt) < '2020-01-24' THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Selected_Initial_Rate/12)/ (1 - POW((1 + Selected_Initial_Rate/12), -(Selected_Term_Month))),3)),3) 
-  END AS T_Selected_Post_Loan_FCF 
 FROM F0),
 
 F2 AS(
@@ -186,23 +176,26 @@ SELECT
   UW_Decision,
   Decline_Code, 
   Decline_Reason,
-  CREDIT_SCORE_Rejection,
-  MAXIMUM_DTI_Rejection,
-  INQ3MONTHS_Rejection,
-  THIN_FILE_Rejection,
-  STUDENT_LOANS_Rejection,
-  NEW_CREDIT_TRADES_RATIO_Rejection,
-  INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection,
-  BANKRUPTCY_Rejection,
-  COLLECTIONS_Rejection,
-  MAJOR_DEROGATORY_Rejection,
-  T_Credit_Hard_Knock_Outs,
+  FICO, BCC5838, BCC5830,BCX5830, RTR5030, BAX5030, BCX5030, ILN5820, ILN5824, ALX5830, AUA5820, STU5020, STU5820, MTF5820, MTS5820,
+  HLC5820, ALL5830, MTA5830, MTX5839, AUT5820, MTJ0416,
+  
+--   CREDIT_SCORE_Rejection,
+--   MAXIMUM_DTI_Rejection,
+--   INQ3MONTHS_Rejection,
+--   THIN_FILE_Rejection,
+--   STUDENT_LOANS_Rejection,
+--   NEW_CREDIT_TRADES_RATIO_Rejection,
+--   INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection,
+--   BANKRUPTCY_Rejection,
+--   COLLECTIONS_Rejection,
+--   MAJOR_DEROGATORY_Rejection,
+--   T_Credit_Hard_Knock_Outs,
   T_Credit_Hard_Knock_Outs_Failure,
   Revolving_Credit_Card_Debt,
   Z,
   CASE 
-  WHEN Z = Revolving_Credit_Card_Debt THEN 'Match'
-  WHEN Z != Revolving_Credit_Card_Debt THEN 'Unmatch'
+  WHEN ROUND(Z,0) = ROUND(Revolving_Credit_Card_Debt,0) THEN 'Match'
+  WHEN ROUND(Z,0) != ROUND(Revolving_Credit_Card_Debt,0) THEN 'Unmatch'
   ELSE 'Unavailable'
   END AS Credit_Card_Debt_Match,
   
@@ -210,16 +203,16 @@ SELECT
   T_Monthly_Revolving_Debt,
   
   CASE 
-  WHEN Total_Revolving_Debt = T_Monthly_Revolving_Debt THEN 'Match' 
-  WHEN Total_Revolving_Debt != T_Monthly_Revolving_Debt THEN 'Unmatch' 
+  WHEN ROUND(Total_Revolving_Debt,0) = ROUND(T_Monthly_Revolving_Debt,0) THEN 'Match' 
+  WHEN ROUND(Total_Revolving_Debt,0) != ROUND(T_Monthly_Revolving_Debt,0) THEN 'Unmatch' 
   ELSE 'Unavailable'
   END AS Total_Revolving_Debt_Match,
   
   Total_Installment_Debt,
   T_Monthly_Installment_Debt,
   CASE 
-  WHEN Total_Installment_Debt = T_Monthly_Installment_Debt THEN 'Match'
-  WHEN Total_Installment_Debt != T_Monthly_Installment_Debt THEN 'Unmatch'
+  WHEN ROUND(Total_Installment_Debt, 0) = ROUND(T_Monthly_Installment_Debt,0) THEN 'Match'
+  WHEN ROUND(Total_Installment_Debt,0) != ROUND(T_Monthly_Installment_Debt,0) THEN 'Unmatch'
   ELSE 'Unavailable'
   END AS Total_Installment_Debt_Match,
   
@@ -227,16 +220,16 @@ SELECT
   T_Monthly_Mortgage_Debt, 
   
   CASE 
-  WHEN Total_Mortgage_Debt = T_Monthly_Mortgage_Debt THEN 'Match'
-  WHEN Total_Mortgage_Debt != T_Monthly_Mortgage_Debt THEN 'Unmatch'
+  WHEN ROUND(Total_Mortgage_Debt,0) = ROUND(T_Monthly_Mortgage_Debt,0) THEN 'Match'
+  WHEN ROUND(Total_Mortgage_Debt,0) != ROUND(T_Monthly_Mortgage_Debt,0) THEN 'Unmatch'
   ELSE 'Unavailable'
   END AS Total_Mortgage_Debt_Match,
   
   Transportation_Expense,
   T_Transportation_Expense,
   CASE
-  WHEN Transportation_Expense = T_Transportation_Expense THEN 'Match'
-  WHEN Transportation_Expense != T_Transportation_Expense THEN 'Unmatch'
+  WHEN ROUND(Transportation_Expense,0) = ROUND(T_Transportation_Expense,0) THEN 'Match'
+  WHEN ROUND(Transportation_Expense,0) != ROUND(T_Transportation_Expense,0) THEN 'Unmatch'
   ELSE 'Unavailable'
   END AS Transportation_Expense_Match,
   
@@ -244,11 +237,12 @@ SELECT
   T_Additional_Bureau_Debt,
   
   CASE 
-  WHEN Bureau_Debt = T_Additional_Bureau_Debt THEN 'Match'
-  WHEN Bureau_Debt != T_Additional_Bureau_Debt THEN 'Unmatch'
+  WHEN ROUND(Bureau_Debt,0) = ROUND(T_Additional_Bureau_Debt,0) THEN 'Match'
+  WHEN ROUND(Bureau_Debt,0) != ROUND(T_Additional_Bureau_Debt,0) THEN 'Unmatch'
   ELSE 'Unavailable'
   END AS Bureau_Debt_Match,
   
+  MSA_Housing_Expense,
   Housing_Expense,
   T_Housing_Expense,
   
@@ -259,8 +253,8 @@ SELECT
   END AS Housing_Expense_Match,
   
   Stated_Monthly_Income,
-  Offer_Verified_Montly_Income,
-  calc_income,
+  Offer_Verified_Monthly_Income,
+  Calc_Income,
   Monthly_Debt,
   T_Monthly_Debt,  
   
@@ -271,13 +265,13 @@ SELECT
   END AS Monthly_Debt_Match,
   
   Total_Bureau_Reported_SL_Balance,
-  STU5020,
-  Amt_To_Refi,  
-  Amt_To_Borrow,
+  CASE WHEN Amt_To_Refi>= Amt_To_Borrow THEN Amt_To_Refi
+  ELSE Amt_To_Borrow
+  END AS Amt_To_Borrow,
   Amt_Requested,
-  Selected_Term_Month,
+--   Selected_Term_Month,
   Current_Student_Loan_Payment,
-  T_Pre_Refi_Student_Loan_Payment_Bureau,
+--   T_Pre_Refi_Student_Loan_Payment_Bureau,
   T_Pre_Refi_Student_Loan_Payment_Req,
   CASE 
   WHEN ROUND(Current_Student_Loan_Payment,0) =  ROUND(T_Pre_Refi_Student_Loan_Payment_Req,0) THEN 'Match'
@@ -288,18 +282,17 @@ SELECT
   T_Offer_Post_Refi_Student_Loan_Payment_Bureau,
   T_Offer_Post_Refi_Student_Loan_Payment_Req,
   T_Offer_Post_Refi_Student_Loan_Payment, 
-  T_Selected_Post_Refi_Student_Loan_Payment_Bureau,
-  T_Selected_Post_Refi_Student_Loan_Payment_Req,
+
   Pre_Loan_DTI,  
   
   CASE 
-  WHEN (Offer_Verified_Montly_Income = 0 OR Offer_Verified_Montly_Income > Stated_Monthly_Income) THEN ROUND(T_Monthly_Debt / Stated_Monthly_Income, 4) 
-  ELSE ROUND(T_Monthly_Debt / Offer_Verified_Montly_Income, 4)
+  WHEN (Offer_Verified_Monthly_Income = 0 OR Offer_Verified_Monthly_Income > Stated_Monthly_Income) AND Stated_Monthly_Income != 0 THEN ROUND(T_Monthly_Debt / Stated_Monthly_Income, 4) 
+  ELSE ROUND(T_Monthly_Debt / Offer_Verified_Monthly_Income, 4)
   END AS T_Pre_Loan_DTI,
  
   CASE 
-  WHEN Pre_Loan_DTI = ROUND(T_Monthly_Debt/Calc_Income, 4) THEN 'Match'
-  WHEN Pre_Loan_DTI != ROUND(T_Monthly_Debt/Calc_Income, 4) THEN 'Unmatch'
+  WHEN Calc_Income != 0 AND Pre_Loan_DTI = ROUND(T_Monthly_Debt/Calc_Income, 4) THEN 'Match'
+  WHEN Calc_Income != 0 AND Pre_Loan_DTI != ROUND(T_Monthly_Debt/Calc_Income, 4) THEN 'Unmatch'
   ELSE 'Unavailble'
   END AS Pre_Loan_DTI_Match,
   
@@ -311,7 +304,6 @@ SELECT
   Offer_Term,
   Offer_Autopay_Rate,
   Offer_Non_Autopay_Rate,
-  Offer_Pre_Loan_DTI,
   Offer_Pre_Loan_Cashflow,
   T_Pre_Loan_FCF,
   
@@ -331,22 +323,16 @@ SELECT
   ELSE 'Unavailable'
   END AS Post_Loan_FCF_Match,
   
-  Selected_Term,
-  Selected_Initial_Rate,
-  Selected_Post_Loan_DTI,
-  Selected_Post_Loan_Cashflow,
-  T_Selected_Post_Loan_FCF,
-  
   CASE 
   WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF < 1500 AND UW_Decision != 'DECLINE' AND App_status NOT IN ('Cancelled','Declined')  THEN 'Post_Loan_FCF_Decline_Failure'
   ELSE 'Pass'
   END AS T_FCF_Decline_Failure,
   
-  CASE 
-  WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF > 1500 
-  AND UW_Decision = 'DECLINE' AND Decline_code NOT IN ('FRAUD')  THEN  'Apps should not have been declined, while declined'
-  ELSE 'Pass'
-  END AS T_UW_False_Decline
+--   CASE 
+--   WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF > 1500 
+--   AND UW_Decision = 'DECLINE' AND Decline_code NOT IN ('FRAUD')  THEN  'Apps should not have been declined, while declined'
+--   ELSE 'Pass'
+--   END AS T_UW_False_Decline
   
 FROM F1
 Order by 	App_Created_Dt DESC 
@@ -354,7 +340,6 @@ Order by 	App_Created_Dt DESC
 SELECT 
   *
 FROM F2
-WHERE (T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass') 
--- AND APP_STATUS = 'Loan Funded'
--- AND application_uuid_value = '21e84c73-4d84-4f31-a520-31df209eee08'
+WHERE (T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass')
+
 
