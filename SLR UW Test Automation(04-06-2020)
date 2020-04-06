@@ -7,10 +7,13 @@ SELECT * FROM(
   s.decision AS UW_Decision,
   d.code AS Decline_Code, 
   d.reason AS Decline_Reason,
-  s.uw_packet.credit_score AS FICO,
+  sla.hard_fico_score AS FICO,
+  sla.citizenship AS Citizenship,
   (CAST(s.uw_packet.credit_score AS FLOAT64)<680 OR s.uw_packet.credit_score IS NULL OR CAST(s.uw_packet.credit_score AS FLOAT64) = 0) OR s.uw_packet.credit_score IN (9000,9001,9002,9003) AS CREDIT_SCORE_Rejection,
   CAST(s.selected_offer.post_loan_dti.value AS FLOAT64) AS Post_Loan_DTI,
   CAST(IFNULL(s.selected_offer.post_loan_dti.value,o.pre_loan_dti.value) AS FLOAT64) > 0.65 AS MAXIMUM_DTI_Rejection,
+  (loan_amount > 250000 or loan_amount < 5000)  AS LOAN_SIZE_Rejection,
+  citizenship NOT IN ('CITIZEN', 'PERMANENT_RESIDENT') AS CITIZENSHIP_Rejection,
   IQT9416 > 3 AS INQ3MONTHS_Rejection,
   (ALS8220 < 12 OR ALX8220 < 12) AS THIN_FILE_Rejection,
   STU8151 < 13 OR (STU6200 >30 AND STU6200 <= 400) AS STUDENT_LOANS_Rejection,
@@ -102,12 +105,8 @@ JOIN `figure-production.reporting.lkup_slr_application` sla ON sla.application_u
 JOIN (SELECT *, CASE WHEN MTA5830 in(999999998, 999999996) THEN 0 ELSE MTA5830 END AS MTA5830_new FROM `reporting.lkup_credit_attr` WHERE credit_type = 'Hard Credit') lca ON lca.application_uuid_value = s.application_uuid.value
 LEFT JOIN UNNEST(offers) AS O
 LEFT JOIN UNNEST(decline_reasons) AS D
-ORDER BY s.kafka_timestamp_ts DESC
-) 
+ORDER BY s.kafka_timestamp_ts DESC) 
 WHERE R = 1),
-
--- SELECT * FROM F0
--- WHERE application_uuid_value = 'e9d9dffd-8f31-4092-96ad-0c29d6cf72ad'
 
 F1 AS (
 SELECT 
@@ -124,7 +123,7 @@ SELECT
   THEN ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) 
   ELSE NULL 
   END AS T_Offer_Post_Refi_Student_Loan_Payment_Req,  
---
+
   CASE 
   WHEN Amt_To_Refi >= STU5020 AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0 THEN ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)
   WHEN Amt_To_Refi < STU5020 AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0  THEN ROUND((STU5020 * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 +  Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3) + ROUND((STU5020 * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3)*(1-Amt_To_Refi/STU5020)
@@ -136,10 +135,13 @@ SELECT
   END AS T_Monthly_Debt,
   
   CASE
-  WHEN (CREDIT_SCORE_Rejection IS TRUE OR MAXIMUM_DTI_Rejection IS TRUE OR INQ3MONTHS_Rejection IS TRUE OR THIN_FILE_Rejection IS TRUE OR STUDENT_LOANS_Rejection IS TRUE OR NEW_CREDIT_TRADES_RATIO_Rejection IS TRUE OR INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection IS TRUE OR BANKRUPTCY_Rejection IS TRUE OR COLLECTIONS_Rejection IS TRUE OR MAJOR_DEROGATORY_Rejection IS TRUE) THEN  'True'
+  WHEN (CREDIT_SCORE_Rejection IS TRUE OR LOAN_SIZE_Rejection IS TRUE OR Citizenship_Rejection IS TRUE OR MAXIMUM_DTI_Rejection IS TRUE OR INQ3MONTHS_Rejection IS TRUE OR THIN_FILE_Rejection IS TRUE OR STUDENT_LOANS_Rejection IS TRUE OR NEW_CREDIT_TRADES_RATIO_Rejection IS TRUE 
+  OR INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection IS TRUE OR BANKRUPTCY_Rejection IS TRUE OR COLLECTIONS_Rejection IS TRUE OR MAJOR_DEROGATORY_Rejection IS TRUE) THEN  'True'
+  ELSE 'False'
   END AS T_Credit_Hard_Knock_Outs,
   CASE 
-  WHEN (Amt_To_Borrow > 250000 or Amt_To_Borrow < 5000) AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'Loan_Size_Rejection_Failure'
+  WHEN LOAN_SIZE_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'Loan_Size_Rejection_Failure'
+  WHEN Citizenship_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'Citizenship_Rejection_Failure'
   WHEN CREDIT_SCORE_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'CREDIT_SCORE_Rejection_Failure'
   WHEN MAXIMUM_DTI_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'MAXIMUM_DTI_Rejection_Failure'
   WHEN INQ3MONTHS_Rejection IS TRUE AND UW_Decision != 'DECLINE' AND App_Status NOT IN ('Cancelled', 'Declined') THEN 'INQ3MONTHS_Rejection_Failure'
@@ -164,9 +166,8 @@ SELECT
   WHEN Amt_To_Refi < Total_Bureau_Reported_SL_Balance AND DATE(App_Created_Dt) >= '2020-01-24' AND Total_Bureau_Reported_SL_Balance != 0 AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0  THEN ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(offer_Term*12))),3) - 
   ROUND((Total_Bureau_Reported_SL_Balance * 0.0638/12)/ (1 - POW((1 + 0.0638/12), -120)),3) * (1 - Amt_To_Refi/Total_Bureau_Reported_SL_Balance) ),3)
   WHEN DATE(App_Created_Dt) < '2020-01-24' AND Offer_Non_Autopay_Rate != 0 AND offer_term != 0 THEN  ROUND((Calc_Income * Tax_Reduction_Factor - T_Housing_Expense - T_Transportation_Expense - T_Additional_Bureau_Debt - ROUND((Amt_To_Refi * Offer_Non_Autopay_Rate/12)/ (1 - POW((1 + Offer_Non_Autopay_Rate/12), -(Offer_Term*12))),3)),3)
-  END AS T_Offer_Post_Loan_FCF, 
-  
-FROM F0),
+  END AS T_Offer_Post_Loan_FCF
+  FROM F0),
 
 F2 AS(
 SELECT 
@@ -177,19 +178,9 @@ SELECT
   Decline_Code, 
   Decline_Reason,
   FICO, BCC5838, BCC5830,BCX5830, RTR5030, BAX5030, BCX5030, ILN5820, ILN5824, ALX5830, AUA5820, STU5020, STU5820, MTF5820, MTS5820,
-  HLC5820, ALL5830, MTA5830, MTX5839, AUT5820, MTJ0416,
+  HLC5820, ALL5830, MTA5830, MTX5839, AUT5820, MTJ0416,IQT9416, MTA5830_new,
   
---   CREDIT_SCORE_Rejection,
---   MAXIMUM_DTI_Rejection,
---   INQ3MONTHS_Rejection,
---   THIN_FILE_Rejection,
---   STUDENT_LOANS_Rejection,
---   NEW_CREDIT_TRADES_RATIO_Rejection,
---   INSTALLMENT_AND_REVOLVING_PAYMENTS_Rejection,
---   BANKRUPTCY_Rejection,
---   COLLECTIONS_Rejection,
---   MAJOR_DEROGATORY_Rejection,
---   T_Credit_Hard_Knock_Outs,
+  T_Credit_Hard_Knock_Outs,
   T_Credit_Hard_Knock_Outs_Failure,
   Revolving_Credit_Card_Debt,
   Z,
@@ -269,9 +260,7 @@ SELECT
   ELSE Amt_To_Borrow
   END AS Amt_To_Borrow,
   Amt_Requested,
---   Selected_Term_Month,
   Current_Student_Loan_Payment,
---   T_Pre_Refi_Student_Loan_Payment_Bureau,
   T_Pre_Refi_Student_Loan_Payment_Req,
   CASE 
   WHEN ROUND(Current_Student_Loan_Payment,0) =  ROUND(T_Pre_Refi_Student_Loan_Payment_Req,0) THEN 'Match'
@@ -298,6 +287,7 @@ SELECT
   
   CASE 
   WHEN (T_Credit_Hard_Knock_Outs != 'True') AND (T_Monthly_Debt/Stated_Monthly_Income) > 0.65 AND UW_Decision != 'DECLINE' AND App_status NOT IN ('Cancelled','Declined')  THEN 'Pre_Loan_DTI_Decline_Failure' 
+  WHEN (T_Monthly_Debt/Stated_Monthly_Income) IS NULL THEN 'Unavailable'
   ELSE 'Pass'
   END AS T_Pre_Loan_DTI_Decline_Failure,
   
@@ -325,21 +315,23 @@ SELECT
   
   CASE 
   WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF < 1500 AND UW_Decision != 'DECLINE' AND App_status NOT IN ('Cancelled','Declined')  THEN 'Post_Loan_FCF_Decline_Failure'
+  WHEN T_Offer_Post_Loan_FCF IS NULL THEN 'Unavailable'
   ELSE 'Pass'
-  END AS T_FCF_Decline_Failure,
-  
---   CASE 
---   WHEN (T_Credit_Hard_Knock_Outs_Failure = 'Pass') AND ((T_Monthly_Debt/Calc_Income) <= 0.65 OR (T_Monthly_Debt/Calc_Income) IS NULL) AND T_Offer_Post_Loan_FCF > 1500 
---   AND UW_Decision = 'DECLINE' AND Decline_code NOT IN ('FRAUD')  THEN  'Apps should not have been declined, while declined'
---   ELSE 'Pass'
---   END AS T_UW_False_Decline
-  
+  END AS T_FCF_Decline_Failure
 FROM F1
-Order by 	App_Created_Dt DESC 
-)
-SELECT 
-  *
-FROM F2
-WHERE (T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass')
+ORDER BY 	App_Created_Dt DESC 
+), 
 
+F3 AS (
+SELECT 
+  *,
+  CASE 
+  WHEN (T_Credit_Hard_Knock_Outs_Failure != 'Pass' OR  T_Pre_Loan_DTI_Decline_Failure != 'Pass' OR T_FCF_Decline_Failure != 'Pass') AND App_Status NOT IN ('Declined', 'Cancelled') THEN 'App should have been declined, while were not declined'
+  WHEN (T_Credit_Hard_Knock_Outs != 'True' AND T_Pre_Loan_DTI_Decline_Failure = 'Pass' AND T_FCF_Decline_Failure = 'Pass') AND UW_Decision = 'DECLINE' AND  App_Status = 'Declined' THEN 'App should have not been declined, while were declined'
+  ELSE 'Pass'
+  END AS T_UW_False_Decline
+FROM F2)
+
+SELECT * FROM F3
+WHERE T_UW_False_Decline != 'Pass'
 
