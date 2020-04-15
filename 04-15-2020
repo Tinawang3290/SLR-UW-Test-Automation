@@ -26,6 +26,11 @@ SELECT
   CAST(ALL9121 AS FLOAT64) AS ALL9121,
   CAST(ALL9122 AS FLOAT64) AS ALL9122,
   CAST(MTF8169 AS FLOAT64) AS MTF8169,
+  CAST(BCC5830 AS FLOAT64) AS BCC5830,
+  CAST(BCX5830 AS FLOAT64) AS BCX5830,
+  CAST(ALX5830 AS FLOAT64) AS ALX5830,
+  CAST(ILN5824 AS FLOAT64) AS ILN5824,
+ 
   CAST(subcode AS FLOAT64) AS FACTA_Subcode, 
   d.description AS Experian_Message,
   CASE 
@@ -89,8 +94,8 @@ ORDER BY App_Start_Date DESC),
 F0 AS (
 SELECT
   c.*,
-  calc_monthly_debt,
-  calc_monthly_debt_v2,
+  ad.calc_monthly_debt,
+  ad.calc_monthly_debt_v2,
   CASE 
   WHEN BCC5830 > BCX5830 THEN ALX5830 - ILN5824
   ELSE (T_Monthly_Revolving_Debt + T_Monthly_Installment_Debt + T_Monthly_Mortgage_Debt)
@@ -105,7 +110,7 @@ SELECT
   verified_income_amount, 
   
   CASE 
-  WHEN Age <= 59.5 THEN (verified_asset_depletion_retirement_amount*0.7) + verified_asset_depletion_investment_amount + verified_asset_depletion_savings_amount
+  WHEN c.age <= 59.5 THEN (verified_asset_depletion_retirement_amount*0.7) + verified_asset_depletion_investment_amount + verified_asset_depletion_savings_amount
   ELSE verified_asset_depletion_retirement_amount + verified_asset_depletion_investment_amount + verified_asset_depletion_savings_amount
   END AS T_Total_Assets,
   
@@ -214,10 +219,10 @@ SELECT
   THEN T_AVM_Value*(1- AVM_FSD/200)
   WHEN (T_AVM_Value >= 100000 AND AVM_FSD > 20) OR ( T_AVM_Value >= 100000 AND land_use_code = 112 ) AND App_Start_Date >= '2020-03-21' THEN T_AVM_Value *(1- AVM_FSD/100)
   END AS T_Adjusted_Collateral_Value,
+  --
+  CASE WHEN Stated_Monthly_Income IS NOT NULL AND Stated_Monthly_Income != 0 AND App_Term IS NOT NULL AND App_Term != 0  THEN ROUND(T_Monthly_Debt/(Stated_Monthly_Income + (T_Total_Assets*0.04/12)/(1-POWER((1+0.04/12),(- App_Term*12)))),4) END AS T_DTI,
   
-  T_Monthly_Debt/(Stated_Monthly_Income + (T_Total_Assets*0.04/12)/(1-(1+0.04/12)^(- App_Term*12))) AS T_DTI,
-  
- --
+ 
    CASE 
    WHEN Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO'  AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL AND Document_Date IS NOT NULL THEN 'Involuntary_Lien_Knockout(DT returns)'
    WHEN Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO'  AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NULL AND Document_Description IS  NULL AND Document_Date IS  NULL THEN 'Involuntary_Lien_Knockout(DT no returns)'
@@ -264,7 +269,9 @@ FROM C
 WHERE T_Pre_Loan_Adj_CLTV != pre_loan_adj_cltv AND App_Start_Date > '2020-02-27' AND App_Start_Date != '2020-03-21')
 
 SELECT * FROM CC
-WHERE CLTV_Decline_Check = 'CLTV_Decline_Failure' OR DTI_Decline_Check = 'DTI_Decline_Failure'
+WHERE CLTV_Decline_Check = 'CLTV_Decline_Failure' 
+OR DTI_Decline_Check = 'DTI_Decline_Failure'
+OR Credit_Property_invol_Decline_Failure != 'Apps were declined correctly'
 
 -- SELECT  avm_fsd, prequal_avm_fsd  FROM reporting.lkup_property
 -- WHERE property_uuid_value = '0c87aaa8-6e36-4673-a339-d39679a9118b'
