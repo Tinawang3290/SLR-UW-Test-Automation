@@ -1,0 +1,143 @@
+WITH f0 AS (
+SELECT
+  kafka_timestamp_ts,
+  application_uuid.value AS Application_UUID_Value,
+  amount_to_borrow.amount AS Amt_To_Borrow,
+  selected_offer.int_rate.value AS Selected_Int_Rate,
+  selected_offer.term AS Selected_Term,
+  selected_offer.rate_type AS Selected_Rate_Type,
+  o.margin.value AS Margin,
+  o.libor.value AS Libor,
+  o.rate_type AS Rate_Type,
+  CAST(o.term AS FLOAT64) AS Term,
+  ROUND(CAST(o.int_rate.value AS FLOAT64),5) AS Autopay_Int_Rate,
+  CASE 
+  WHEN Rate_Type = 'FIXED' THEN ROUND(CAST(o.int_rate.value AS FLOAT64),5)
+  WHEN Rate_Type = 'FLOATING' THEN ROUND((SAFE_CAST(o.margin.value AS FLOAT64) + COALESCE(CAST(o.libor.value AS FLOAT64),0) - 0.0025),5) 
+  END AS T_Autopay_Rate, 
+  ROUND(CAST(o.non_autopay_int_rate.value AS FLOAT64),5) AS Non_Autopay_Rate,
+  CASE 
+  WHEN Rate_Type = 'FIXED' THEN ROUND(CAST(o.non_autopay_int_rate.value AS FLOAT64),5)
+  WHEN Rate_Type = 'FLOATING' THEN ROUND((SAFE_CAST(o.margin.value AS FLOAT64) + COALESCE(CAST(o.libor.value AS FLOAT64),0)),5) 
+  END AS T_Non_Autopay_Rate,
+  o.origination_fee.value AS Origination_Fee,
+  CAST(o.origination_fee_percentage.value AS FLOAT64) AS Origination_Fee_Percentage,
+  ROUND(CAST(o.non_autopay_apr_rate.value AS FLOAT64),5) AS Non_Autopay_APR_Rate,
+  n.Ori_Autopay_Int_Rate,
+  ROUND(CAST(o.apr_rate.value AS FLOAT64),5) AS APR_Rate,
+  round(CAST(o.rate_cap.value AS Float64),5) AS Rate_Cap_Value,
+  ROUND((SAFE_CAST(o.margin.value AS FLOAT64) + COALESCE(CAST(o.libor.value AS FLOAT64),0) + CAST(o.origination_fee_percentage.value AS FLOAT64)),5) AS T_Ofee_Usury_Cap_Percentage,
+  o.orig_fee_type AS Orig_Fee_Type,
+  o.origination_fees.amount AS Origination_Fees,
+  d.code AS Decline_Code,
+  d.reason AS Decline_Reason,
+FROM `figure-development.staging_evolved.uw_data_proto_external_decision_slr_r1` s
+LEFT JOIN UNNEST(offers) AS O
+LEFT JOIN UNNEST(Decline_reasons) AS d
+LEFT JOIN (
+
+  SELECT application_uuid.value AS Application_UUID_Value, 
+  o.Term AS Term,
+  CASE WHEN CAST(o.origination_fee_percentage.value AS FLOAT64) = 0 AND  o.rate_type ='FIXED' THEN ROUND(CAST(o.int_rate.value AS FLOAT64),5) END AS Ori_Autopay_Int_Rate,
+  ROUND(CAST(o.int_rate.value AS FLOAT64),5)
+  FROM `figure-development.staging_evolved.uw_data_proto_external_decision_slr_r1` s
+  LEFT JOIN UNNEST(offers) AS O
+  WHERE CAST(o.origination_fee_percentage.value AS FLOAT64) = 0 AND o.rate_type ='FIXED' AND application_uuid.value = 'b360dec9-2571-4db2-9f90-061d6b747ccd' AND term =10
+  
+  ) n ON n.Application_UUID_Value = s.application_uuid.Value AND n.Term = o.Term
+),
+
+-- 
+SELECT *, row_number() over(partition)
+FROM `figure-development.staging_evolved.uw_data_proto_external_decision_slr_r1` s
+
+WHERE  application_uuid.value = 'b360dec9-2571-4db2-9f90-061d6b747ccd' 
+
+F1 AS(SELECT 
+  *,
+  CASE
+    WHEN CAST(term AS FLOAT64) = 5 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/1.75),5)
+    WHEN CAST(term AS FLOAT64) = 7 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate  - Origination_Fee_Percentage/2),5)
+    WHEN CAST(term AS FLOAT64) = 10 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/2.5),5)
+    WHEN CAST(term AS FLOAT64) = 15 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/3),5)
+    WHEN CAST(term AS FLOAT64) = 20 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/3.25),5)
+  END AS T_Autopay_Int_Adj_Rate,
+    CASE 
+    WHEN CAST(term AS FLOAT64) = 5 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/2.4),5) 
+    WHEN CAST(term AS FLOAT64) = 7  AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/3.3),5)
+    WHEN CAST(term AS FLOAT64) = 10  AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/4.6),5)
+    WHEN CAST(term AS FLOAT64) = 15 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/6.7),5)
+    WHEN CAST(term AS FLOAT64) = 20 AND Rate_Type = 'FIXED' THEN ROUND((Ori_Autopay_Int_Rate - Origination_Fee_Percentage/8.5),5)
+  END AS T_APR_Adj_Rate
+FROM F0)
+
+SELECT 
+  kafka_timestamp_ts,
+  Application_UUID_Value,
+  Amt_To_Borrow,
+  Selected_Int_Rate,
+  Selected_Term,
+  Selected_Rate_Type,
+  Margin,
+  Libor,
+  Rate_Type,
+  Term,
+  T_Autopay_Rate,
+  CASE 
+  WHEN Autopay_Int_Rate = T_Autopay_Rate THEN 'Match'
+  WHEN Autopay_Int_Rate != T_Autopay_Rate THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS T_Autopay_Rate_Match,
+  Non_Autopay_Rate,
+  T_Non_Autopay_Rate,
+  CASE 
+  WHEN Non_Autopay_Rate = T_Non_Autopay_Rate THEN 'Match'
+  WHEN Non_Autopay_Rate != T_Non_Autopay_Rate THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS T_Non_Autopay_Rate_Match,
+  Origination_Fee,
+  Origination_Fee_Percentage,
+  Ori_Autopay_Int_Rate,
+  Autopay_Int_Rate,
+
+  T_Autopay_Int_Adj_Rate,
+  CASE
+  WHEN Autopay_Int_Rate = T_Autopay_Int_Adj_Rate THEN 'Match'
+  WHEN Autopay_Int_Rate != T_Autopay_Int_Adj_Rate THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS T_Autopay_APR_Adj_Rate_Match,
+  Non_Autopay_APR_Rate,
+  APR_Rate,
+  T_APR_Adj_Rate,
+  CASE
+  WHEN APR_Rate = T_APR_Adj_Rate THEN 'Match'
+  WHEN APR_Rate != T_APR_Adj_Rate THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS T_APR_Adj_Rate_Match,
+  Rate_Cap_Value,
+  T_Ofee_Usury_Cap_Percentage
+FROM F1
+WHERE 
+--Autopay_Int_Rate != T_Autopay_Rate 
+-- OR Non_Autopay_Rate != T_Non_Autopay_Rate
+Autopay_Int_Rate != T_Autopay_Int_Adj_Rate
+-- APR_Rate != T_APR_Adj_Rate
+-- AND application_uuid_value = '1dd6b0f6-9c66-44cf-8660-ba26c6f78f06' ANd term = 20
+ 
+ORDER BY kafka_timestamp_ts DESC
+
+-- WHERE o.origination_fee.value IS NOT NULL
+
+--   o.pre_loan_dti.value AS Pre_Loan_DTI,
+--   o.post_loan_dti.value AS Post_Loan_DTI,
+--   o.monthly_income.amount AS Monthly_Income,
+--   o.monthly_asset_depletion.amount AS Monthly_Asset_Depletion,
+--   o.stated_monthly_income.amount AS Stated_Monthly_Income,
+--   o.stated_monthly_asset_depletion.amount AS Stated_Monthly_Asset_Depletion,
+--   o.verified_monthly_asset_depletion.amount AS Verifiedd_Monthly_Asset_Depletion,
+--   o.verified_monthly_income.amount AS Verified_Monthly_Income,
+--   o.pre_loan_cashflow.amount AS Pre_Loan_Cashflow,
+--   o.post_loan_cashflow.amount AS Post_Loan_Cashflow,
+--   uw_packet.free_cash_flow.amount AS Free_Cashflow,
+--   selected_offer.post_loan_dti.value AS Selected_Post_Loan_DTI,
+--   selected_offer.post_loan_cashflow.value AS Selected_Post_Loan_Cashflow,
