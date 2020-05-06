@@ -42,7 +42,7 @@ SELECT
   OR 
   (CAST(la.credit_soft_fico AS FLOAT64) >=760 AND App_Amount > 150000)) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Loan_Size_Knockout_Failure' 
   WHEN (((CAST(la.credit_soft_fico AS FLOAT64) < 620 AND DATE(application_start_date) <= '2020-04-28') OR (CAST(la.credit_soft_fico AS FLOAT64) < 680 AND la.profile_state != 'OK' AND DATE(application_start_date) > '2020-04-28') OR (CAST(la.credit_soft_fico AS FLOAT64) < 720 AND la.profile_state = 'OK' AND DATE(application_start_date) > '2020-04-28')) 
-  AND CAST(la.credit_soft_fico AS FLOAT64) > 850) OR CAST(la.credit_soft_fico AS FLOAT64) IN (9000,9001,9002,9003)
+  OR CAST(la.credit_soft_fico AS FLOAT64) > 850) OR CAST(la.credit_soft_fico AS FLOAT64) IN (9000,9001,9002,9003)
   AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'FICO_Knockout_Failure'
   WHEN MTA2126 > 0 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Delinquent_30mdy_6mo_Knockout_Failure' 
   WHEN COL3211 > 0 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Non_Medical_Collections_Knockout_Failure'
@@ -69,7 +69,7 @@ SELECT
   WHEN BCC5830 <= BCX5830 AND CAST(la.credit_soft_fico AS FLOAT64) >= 740 THEN ROUND(AUA5820 + STU5020*0.0035 + (ILN5820 - (STU5820 + AUA5820)) - ILN5824,4)
   END AS T_Monthly_Installment_Debt,
   CASE 
-  WHEN BCC5830 <= BCX5830 AND CAST(la.credit_soft_fico AS FLOAT64) BETWEEN 680 AND 739 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
+  WHEN BCC5830 <= BCX5830 AND CAST(la.credit_soft_fico AS FLOAT64) BETWEEN 620 AND 739 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
   WHEN BCC5830 <= BCX5830 AND CAST(la.credit_soft_fico AS FLOAT64) >= 740 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
   END AS T_Monthly_Mortgage_Debt 
 FROM reporting.lkup_application la  
@@ -122,14 +122,14 @@ SELECT
   lp.last_market_sale_date AS Last_Market_Sale_Date,
  
   CASE WHEN (CAST(ad.prequal_avm_amount AS FLOAT64) IS NULL AND CAST(ad.avm_value_amount AS FLOAT64) IS NULL) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'AVM_Knockout_Failure'
-  WHEN ((CAST(lp.land_use_code AS FLOAT64) NOT IN(102,112,148,163) AND c.App_Start_Date <= '2020-03-20') OR (CAST(lp.land_use_code AS FLOAT64) NOT IN(102,112,163) AND c.App_Start_Date >'2020-03-20'))  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Land_Use_Code_Knockout_Failure'
+  WHEN ((CAST(lp.land_use_code AS FLOAT64) NOT IN(102,112,148,163) AND c.App_Start_Date <= '2020-03-21') OR (CAST(lp.land_use_code AS FLOAT64) NOT IN(102,112,163) AND c.App_Start_Date >'2020-03-21'))  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Land_Use_Code_Knockout_Failure'
   WHEN CAST(uw_packet_acres AS FLOAT64) > 20 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Acres_Knockout_Failure'
   WHEN (SAFE_CAST(h.mortgage_lien_position AS FLOAT64) > 2 AND c.App_Start_Date >= '2020-04-28')  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Lien_Position_Knockout_Failure'
   WHEN (DATE_DIFF(CURRENT_DATE(), SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE), day) <= 90)  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Last_Sale_Date_Knockout_Failure'
   WHEN (h.mortgage_status_indicator IN ('F','U') AND h.mortgage_payoff_date IS NULL 
-  AND (h.mortgage_recording_date IS NOT NULL OR h.mortgage_origination_date IS NOT NULL) 
-  AND (h.mortgage_origination_date IS NOT NULL AND SAFE_CAST(h.mortgage_origination_date AS DATE) >= SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE))
-  AND (h.mortgage_recording_date IS NOT NULL AND SAFE_CAST(h.mortgage_recording_date AS DATE) >= SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE)))
+  AND (h.mortgage_recording_date IS NOT NULL AND h.mortgage_origination_date IS NOT NULL) 
+  AND  SAFE_CAST(h.mortgage_origination_date AS DATE) >= SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE)
+  AND  SAFE_CAST(h.mortgage_recording_date AS DATE) >= SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE))
   AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED')
   THEN 'Foreclosure_Knockout_Failure'
   ELSE 'PASS'
@@ -168,12 +168,10 @@ SELECT
   DATE_DIFF(Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception2_Exists, 
   
   CASE WHEN (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('FEDERAL TAX LIEN', 'MECHANICS LIEN', 'STATE TAX LIEN','JUDGMENT', 'LIEN') AND  CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) IS NULL) THEN 'YES' ELSE 'NO' END AS Exception3_Exists,  
-  DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) AS Date_Difference_By_Month,
+  DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) AS Date_Difference_By_Month,  
   la.pre_loan_cltv AS Pre_Loan_CLTV,
   la.Pre_Loan_Adj_CLTV,
-
-  la.Pre_Loan_DTI 
-
+  la.Pre_Loan_DTI
 FROM reporting.application_details ad
 JOIN reporting.lkup_datatree_summary s ON s.application_uuid.value = ad.application_uuid_value
 JOIN reporting.lkup_datatree_involuntary_liens il ON il.application_uuid.value = ad.application_uuid_value
@@ -200,14 +198,14 @@ SELECT
   
   CASE 
   WHEN Stated_Monthly_Income IS NOT NULL AND Stated_Monthly_Income != 0 AND App_Term IS NOT NULL AND App_Term != 0 THEN ROUND(T_Monthly_Debt/(Stated_Monthly_Income + (T_Total_Assets*0.04/12)/(1-POWER((1+0.04/12),(- App_Term*12)))),4) 
-  WHEN  Stated_Monthly_Income IS NOT NULL AND Stated_Monthly_Income != 0 THEN ROUND(T_Monthly_Debt/Stated_Monthly_Income,4)
+  WHEN  Stated_Monthly_Income IS NOT NULL AND Stated_Monthly_Income != 0 AND (App_Term IS NULL OR App_Term = 0) THEN ROUND(T_Monthly_Debt/Stated_Monthly_Income,4)
   END AS T_DTI,
   
    CASE
    WHEN Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO'  AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL AND Document_Date IS NOT NULL AND Decline_Reasons NOT LIKE '%Involuntary lien%' AND (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE')
-   THEN 'Involuntary_Lien_Knockout(DT returns)'
+   THEN 'Involuntary_Lien_Knockout_Failure(DT returns)'
    WHEN Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO'  AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NULL AND Document_Description IS  NULL AND Document_Date IS  NULL  AND Decline_Reasons NOT LIKE '%Involuntary lien%' AND (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE')
-   THEN 'Involuntary_Lien_Knockout(DT no returns)'
+   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)'
    ELSE 'PASS'
    END AS Involuntary_Lien_Decline_Check,  
    ROW_NUMBER() OVER(PARTITION BY App_UUID ORDER BY App_Start_Date DESC) AS rank
@@ -227,22 +225,25 @@ CC AS (SELECT *,
   CASE
   WHEN ((Amount_Owed = 0 AND (T_Pre_Loan_CLTV > 0.5 OR T_Pre_Loan_Adj_CLTV > 0.5))
   OR
-  (Amount_Owed > 0 AND FICO >=620 AND FICO <660 AND (T_Pre_Loan_CLTV > 0.65 OR T_Pre_Loan_Adj_CLTV > 0.65) AND App_Start_Date < '2020-04-30')
+  (Amount_Owed > 0 AND FICO >=620 AND FICO <660 AND (T_Pre_Loan_CLTV > 0.65 OR T_Pre_Loan_Adj_CLTV > 0.65) AND App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18') 
   OR 
-  (Amount_Owed > 0 AND FICO >=660 AND FICO <680 AND (T_Pre_Loan_CLTV > 0.75 OR T_Pre_Loan_Adj_CLTV > 0.75) AND App_Start_Date < '2020-04-30')
+  (Amount_Owed > 0 AND FICO >=660 AND FICO <680 AND (T_Pre_Loan_CLTV > 0.75 OR T_Pre_Loan_Adj_CLTV > 0.75) AND App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18') 
+  OR 
+  (Amount_Owed > 0 AND FICO >=620 AND FICO <680 AND (((T_Pre_Loan_CLTV > 0.75 OR T_Pre_Loan_Adj_CLTV > 0.75) AND App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date < '2020-03-05')))
+  OR 
+  (Amount_Owed > 0 AND FICO >=680 AND FICO <720 AND (((T_Pre_Loan_CLTV > 0.9 OR T_Pre_Loan_Adj_CLTV > 0.9) AND App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05') OR ((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND App_Start_Date < '2020-03-05')))
   OR
-  (Amount_Owed > 0 AND FICO >=680 AND FICO <720 AND (((T_Pre_Loan_CLTV > 0.85 OR T_Pre_Loan_Adj_CLTV > 0.85) AND App_Start_Date < '2020-04-30') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date >= '2020-04-30')))
+  (Amount_Owed > 0 AND FICO >=680 AND FICO <720 AND (((T_Pre_Loan_CLTV > 0.85 OR T_Pre_Loan_Adj_CLTV > 0.85) AND App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date >= '2020-04-30')))
   OR
-  (Amount_Owed > 0 AND FICO >=720 AND FICO <760 AND (((T_Pre_Loan_CLTV > 0.9 OR T_Pre_Loan_Adj_CLTV > 0.9) AND App_Start_Date < '2020-04-30') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date >= '2020-04-30')))
+  (Amount_Owed > 0 AND FICO >=720 AND FICO <760 AND (((T_Pre_Loan_CLTV > 0.9 OR T_Pre_Loan_Adj_CLTV > 0.9) AND App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date >= '2020-04-30')))
   OR
-  (Amount_Owed > 0 AND FICO >=760 AND FICO <850 AND (((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND App_Start_Date < '2020-04-30') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date >= '2020-04-30'))))
+  (Amount_Owed > 0 AND FICO >=760 AND FICO <850 AND (((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18') OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND App_Start_Date >= '2020-04-30'))))
   AND 
   (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE')
   THEN 'CLTV_Decline_Failure'
   ELSE 'PASS'
   END AS CLTV_Decline_Failure_Check,
   
-  -- Comparison
   CASE 
   WHEN ROUND(Pre_Loan_CLTV,3) = ROUND(T_Pre_Loan_CLTV,3) THEN 'Match'
   WHEN ROUND(Pre_Loan_CLTV,3) != ROUND(T_Pre_Loan_CLTV,3) THEN 'Unmatch'
@@ -261,19 +262,16 @@ CC AS (SELECT *,
   END AS DTI_Decline_Failure_Check,
 
 FROM C
-WHERE
-App_Start_Date > '2020-02-27' AND App_Start_Date != '2020-03-21')
+WHERE App_Start_Date > '2020-02-27')
 
 SELECT * FROM
 (SELECT 
   *,
   CASE  
-  WHEN (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE') AND (Involuntary_Lien_Decline_Check != 'PASS' OR Property_Eligibility_Knockout_Failure_Check != 'PASS' OR Credit_Hard_Knockout_Failure_Check != 'PASS' OR CLTV_Decline_Failure_Check != 'PASS' OR DTI_Decline_Failure_Check ='PASS') THEN 'Apps should have been declined, but were not declined'
+  WHEN (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE') AND (Involuntary_Lien_Decline_Check != 'PASS' OR Property_Eligibility_Knockout_Failure_Check != 'PASS' OR Credit_Hard_Knockout_Failure_Check != 'PASS' OR CLTV_Decline_Failure_Check != 'PASS' OR DTI_Decline_Failure_Check != 'PASS') THEN 'Apps should have been declined, but were not declined'
+  WHEN (App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE') AND (Involuntary_Lien_Decline_Check = 'PASS' AND Property_Eligibility_Knockout_Failure_Check = 'PASS' AND Credit_Hard_Knockout_Failure_Check = 'PASS' AND CLTV_Decline_Failure_Check = 'PASS' AND DTI_Decline_Failure_Check ='PASS') THEN 'Apps should have NOT been declined, but were declined'
   ELSE 'Apps were declined correctly'
   END AS  UW_Decline_Failure_Check
 FROM CC)
 WHERE UW_Decline_Failure_Check != 'Apps were declined correctly'
 ORDER BY App_Start_Date DESC
-
-
-
