@@ -41,15 +41,69 @@ LEFT JOIN reporting.lkup_credit_attr lca ON lca.application_uuid_value = f.appli
 LEFT JOIN reporting.lkup_property lp ON lp.property_uuid_value = f.property_uuid
 WHERE f.mortgage_status_indicator = 'O' AND  LENGTH(f.mortgage_payoff_date) < 1 AND f.application_uuid = '6cd86dac-21ac-4eea-91ca-283283977e01'
 
-SELECT di FROM staging_evolved.property_financial_history
-WHERE application_uuid.value IN('6cd86dac-21ac-4eea-91ca-283283977e01', '17023b2d-cf29-446f-ac3c-f74deecbb5f5')
+-- SELECT di FROM staging_evolved.property_financial_history
+-- WHERE application_uuid.value IN('6cd86dac-21ac-4eea-91ca-283283977e01', '17023b2d-cf29-446f-ac3c-f74deecbb5f5')
 
 
 
 
- SELECT * FROM rpt_staging.stg_property_financial_history
- WHERE application_uuid_value = '6cd86dac-21ac-4eea-91ca-283283977e01'
-
+ SELECT * FROM(
+ SELECT 
+  application_uuid_value,
+  mortgage_payoff_date.value AS Mortgage_Payoff_Date,
+  mortgage_status_indicator AS Mortgage_Status_Indicator,
+  mortgage_origination_date.value AS Mortgage_Origination_Date,
+  mortgage_recording_date.value AS Mortgage_Recording_Date,
+  mortgage_amount.amount AS Mortgage_Amount,
+  original_document_number AS Original_Document_Number, 
+  SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE) AS Last_Sale_Date,
+  CASE WHEN 
+  DATE_DIFF(SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE) , SAFE_CAST(mortgage_origination_date.value AS DATE), DAY) > 7 
+  OR 
+  DATE_DIFF(SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE), SAFE_CAST(mortgage_recording_date.value AS DATE), DAY) > 7
+  OR 
+  (SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE) IS NULL AND mortgage_payoff_date.value IS NOT NULL AND mortgage_status_indicator != 'O')
+  OR
+  mortgage_origination_date.value IS NULL
+  OR 
+  mortgage_recording_date.value IS NULL
+  OR
+  mortgage_amount.amount IS NULL
+  THEN 'Ignore' ELSE 'Show' END AS CoreLogic_Display,
+  row_number() OVER (PARTITION BY property_uuid,
+                                  application_uuid_value,
+                                  mortgage_document_number,
+                                  mortgage_recording_date.value
+                     ORDER BY (updated_seconds+updated_nanos)desc,
+                              (created_seconds + created_nanos) desc,
+                              length(lender) desc) rnum
+ FROM rpt_staging.stg_property_financial_history s
+ LEFT JOIN reporting.lkup_property lp ON lp.property_uuid_value = s.property_uuid
+ -- WHERE application_uuid_value IN ( '6cd86dac-21ac-4eea-91ca-283283977e01', '17023b2d-cf29-446f-ac3c-f74deecbb5f5')
+ )
+ WHERE rnum = 1 AND CoreLogic_Display = 'Show'
+ ORDER BY application_uuid_value
+ 
+ SELECT 
+  s.application_uuid_value,
+  app_start_date,
+  mortgage_payoff_date.value AS Mortgage_Payoff_Date,
+  mortgage_status_indicator AS Mortgage_Status_Indicator,
+  mortgage_origination_date.value AS Mortgage_Origination_Date,
+  mortgage_recording_date.value AS Mortgage_Recording_Date,
+  mortgage_amount.amount AS Mortgage_Amount,
+  original_document_number AS Original_Document_Number, 
+  SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE) AS Last_Sale_Date,
+ FROM rpt_staging.stg_property_financial_history s
+ LEFT JOIN reporting.lkup_property lp ON lp.property_uuid_value = s.property_uuid 
+ JOIN reporting.application_details ad ON ad.application_uuid_value = s.application_uuid_value
+ WHERE LENGTH(mortgage_payoff_date.value) < 1 AND mortgage_status_indicator = 'O' 
+ AND (DATE_DIFF(SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE) , SAFE_CAST(mortgage_origination_date.value AS DATE), DAY) > 7 
+  OR 
+  DATE_DIFF(SAFE_CAST(COALESCE(lp.avm_last_sale_date, lp.current_transfer_sale_date, lp.last_market_sale_date) AS DATE), SAFE_CAST(mortgage_recording_date.value AS DATE), DAY) > 7)
+ ORDER BY app_start_date desc, application_uuid_value
+ 
+ 
 -- DataTree
 SELECT 
   application_uuid.value AS Application_UUID_Value,
