@@ -172,4 +172,4 @@ JOIN reporting.application_details ad ON ad.application_uuid_value = ct.applicat
 LEFT JOIN (SELECT application_uuid_value, CAST(open_date AS DATE) AS Open_Date FROM rpt_staging.stg_credit_tradelines WHERE OPEN is true AND account_type IN ('19', '26') ) t ON t.application_uuid_value =  ct.application_uuid_value
 LEFT JOIN (SELECT application_uuid_value, CAST(status_date AS DATE) AS Status_Date FROM rpt_staging.stg_credit_tradelines WHERE OPEN is false AND account_type IN ('19', '26')) c ON c.application_uuid_value =  ct.application_uuid_value
 WHERE ct.application_uuid_value = '6cd86dac-21ac-4eea-91ca-283283977e01' AND ct.account_type IN ('19', '26')
--- ORDER BY open_date DESC
+-- ORDER BY open_date DESC 
