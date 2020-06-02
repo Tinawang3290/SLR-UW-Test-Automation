@@ -1,0 +1,528 @@
+WITH CP AS (
+SELECT * FROM(
+SELECT  
+  *,
+  ROW_NUMBER() OVER (PARTITION BY app_uuid ORDER BY app_start_date  DESC) AS R,
+  CASE 
+  WHEN BCC5830 > BCX5830 THEN ALX5830 - ILN5824
+  ELSE (COALESCE(T_Monthly_Revolving_Debt,0) + COALESCE(T_Monthly_Installment_Debt,0) + COALESCE(T_Monthly_Mortgage_Debt,0))
+  END AS T_Monthly_Debt,
+FROM(
+SELECT 
+  SAFE_CAST(la.application_start_date AS DATE) AS App_Start_Date,
+  la.application_uuid_value AS App_UUID,
+  la.app_amount AS App_Amount,
+  la.status AS App_Status,
+  la.uw_decision_decision AS UW_Decision,
+  r.decline_reason_code AS Decline_Code,
+  r.decline_reason AS Decline_Reason,
+  la.state AS State,
+  la.has_promo_code,
+  SAFE_CAST(la.dm_cutoff_date AS DATE) dm_cutoff_date, 
+  la.is_direct_mail, 
+  SAFE_CAST(lc.in_home_date AS DATE) in_home_date, 
+  SAFE_CAST(lc.respond_by_date AS DATE) respond_by_date,
+  SAFE_CAST(la.credit_hard_fico AS FLOAT64) Hard_FICO,
+  SAFE_CAST(la.credit_soft_fico AS FLOAT64) Soft_FICO,
+  COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) AS FICO,
+  sud.age AS Age,
+  la.app_term AS App_Term,
+  la.stated_monthly_income AS Stated_Monthly_Income,
+  MTA2126,COL3211,ALM6270, IQT9425,IQM9415, IQA9415, IQF9415,ALL9220,ALL9120,ALL9121,ALL9122, MTF8169,BCC5830, 
+  BCX5830,ALX5830, ILN5824, BCC5838, BAX5030, BCX5030, RTR5030, ILN5820, AUA5820, STU5020, STU5820, MTF5820, MTS5820, HLC5820, MTA5020, 
+  CAST(subcode AS FLOAT64) AS Experian_Subcode,
+  pl.tradeline_match_type,
+  pl.tradeline_matched AS Tradeline_Matched,
+  pl.total_current_balance_amount,
+  SAFE_CAST(all_mortgage_count AS FLOAT64) AS All_Mortgage_Count,
+  SAFE_CAST(f0.mortgage_lien_position AS FLOAT64) AS Mortgage_Lien_Position,
+  t.lien_position AS DT_Lien_Position,
+  la.lien_position AS UW_Lien_Position,
+  p.Figure_Lien_Position,
+  SAFE_CAST(sud.tot_open_balance AS FLOAT64) AS Tot_Open_Balance,
+  SAFE_CAST(sud.all_mort_balance AS FLOAT64) AS All_Mort_Balance,
+
+  la.calc_monthly_debt_v2,
+  sud.uw_packet_home_amount AS UW_Packet_Home_Amount, 
+  CASE 
+  WHEN lp.avm_value_amount IS NULL OR (lp.avm_value_amount >= sud.uw_packet_home_amount) THEN  ROUND(sud.uw_packet_home_amount,4) ELSE ROUND(lp.avm_value_amount,4) END AS T_AVM_Value,
+  sud.avm_fsd AS AVM_FSD,
+  
+  lp.FSD AS T_FSD,
+  verified_income_amount AS Verified_Income_Amount, 
+  
+  CASE 
+  WHEN age <= 59.5 THEN (verified_asset_depletion_retirement_amount*0.7) + verified_asset_depletion_investment_amount + verified_asset_depletion_savings_amount
+  ELSE verified_asset_depletion_retirement_amount + verified_asset_depletion_investment_amount + verified_asset_depletion_savings_amount
+  END AS T_Total_Assets,
+  
+  verified_asset_depletion_retirement_amount AS Verified_Asset_Depletion_Retirement_Amount, 
+  verified_asset_depletion_savings_amount AS Verified_Asset_Depletion_Savings_Amount,
+  verified_asset_depletion_investment_amount AS Verified_Asset_Depletion_Investment_Amount,
+  la.uw_packet_amt_owed AS Amount_Owed,
+  la.adjusted_home_amount AS Adjusted_Home_Amount, 
+  SAFE_CAST(lp.avm_value_amount AS FLOAT64) AS AVM_Value_Amount,
+  SAFE_CAST(lp.prequal_avm_amount AS FLOAT64) AS Prequal_AVM_Amount,
+  lp.land_use_code AS Land_Use_Code,
+  CAST(lp.acres AS FLOAT64) AS Acres,
+  f0.mortgage_amount AS Mortgage_Amount,
+  f0.mortgage_status_indicator AS Mortgage_Status_Indicator,
+  f0.mortgage_payoff_date AS Mortgage_Payoff_Date,
+  f0.mortgage_origination_date AS Mortgage_Origination_Date,
+  f0.mortgage_recording_date AS Mortgage_Recording_Date,
+  SAFE_CAST(f0.Last_sale_date AS DATE) AS Last_Sale_Date,
+
+  CASE 
+  WHEN (COALESCE(CAST(lp.prequal_avm_amount AS FLOAT64),0) = 0 AND COALESCE(CAST(lp.avm_value_amount AS FLOAT64),0) = 0)  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'AVM_Knockout_Failure1'
+  WHEN (COALESCE(CAST(lp.prequal_avm_amount AS FLOAT64),0) != 0 AND COALESCE(CAST(lp.avm_value_amount AS FLOAT64),0) != 0) AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'NOAVMRETURNED'  THEN 'AVM_Knockout_Failure2'
+  
+  WHEN ((CAST(lp.land_use_code AS FLOAT64) NOT IN (102,112,148,163) AND CAST(la.application_start_date AS DATE) < '2020-03-21' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE))))
+  OR (CAST(lp.land_use_code AS FLOAT64) NOT IN (102,112,148,163) AND CAST(in_home_date AS DATE) < '2020-03-21' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))
+  OR (CAST(lp.land_use_code AS FLOAT64) NOT IN (102,112,163) AND CAST(la.application_start_date AS DATE) >='2020-03-21' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE))))
+  OR (CAST(lp.land_use_code AS FLOAT64) NOT IN (102,112,163) AND CAST(in_home_date AS DATE) >= '2020-03-21' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)))   
+  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Land_Use_Code_Knockout_Failure1'
+  
+  WHEN ((CAST(lp.land_use_code AS FLOAT64) IN (102,112,148,163) AND CAST(la.application_start_date AS DATE) < '2020-03-21' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE))))
+  OR (CAST(lp.land_use_code AS FLOAT64) IN (102,112,148,163) AND CAST(in_home_date AS DATE) < '2020-03-21' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))
+  OR (CAST(lp.land_use_code AS FLOAT64) IN (102,112,163) AND CAST(la.application_start_date AS DATE) >= '2020-03-21' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE))))
+  OR (CAST(lp.land_use_code AS FLOAT64) IN (102,112,163) AND CAST(in_home_date AS DATE) >= '2020-03-21' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)))   
+  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'LANDUSE' THEN 'Land_Use_Code_Knockout_Failure2'
+  
+  WHEN CAST(uw_packet_acres AS FLOAT64) > 20 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Acres_Knockout_Failure1'
+  WHEN CAST(uw_packet_acres AS FLOAT64) <= 20 AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'PROPERTY_ACRES' THEN 'Acres_Knockout_Failure2'
+
+  WHEN (((pl.tradeline_matched IS TRUE OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type = 'AMORT')) AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND p.Figure_Lien_Position > 3 AND CAST(la.application_start_date AS DATE) >= '2020-05-16' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)))) 
+  OR ((pl.tradeline_matched IS TRUE OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type = 'AMORT')) AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND p.Figure_Lien_Position > 3 AND CAST(in_home_date AS DATE) >= '2020-05-16' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))
+  OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type != 'AMORT' AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND SAFE_CAST(all_mortgage_count AS FLOAT64) > 2 AND CAST(la.application_start_date AS DATE) >= '2020-05-16' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)))) 
+  OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type != 'AMORT' AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND SAFE_CAST(all_mortgage_count AS FLOAT64) > 2 AND CAST(in_home_date AS DATE) >= '2020-05-16' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))
+  OR (CAST(pl.total_current_balance_amount AS FLOAT64) < 0)
+  OR (CAST(MTA5020 AS FLOAT64) < 0 ))
+  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Lien_Position_Knockout_Failure1'
+
+  WHEN (((pl.tradeline_matched IS TRUE OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type = 'AMORT')) AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND p.Figure_Lien_Position <= 3 AND CAST(la.application_start_date AS DATE) >= '2020-05-16' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)))) 
+  OR ((pl.tradeline_matched IS TRUE OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type = 'AMORT')) AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND p.Figure_Lien_Position <= 3 AND CAST(in_home_date AS DATE) >= '2020-05-16' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))
+  OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type != 'AMORT' AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND SAFE_CAST(all_mortgage_count AS FLOAT64) <= 2 AND CAST(la.application_start_date AS DATE) >= '2020-05-16' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)))) 
+  OR (pl.tradeline_matched IS FALSE AND Pl.tradeline_match_type != 'AMORT' AND CAST(pl.total_current_balance_amount AS FLOAT64) >= 0 AND SAFE_CAST(all_mortgage_count AS FLOAT64) <= 2 AND CAST(in_home_date AS DATE) >= '2020-05-16' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)))
+  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'LIEN_POSITION' THEN 'Lien_Position_Knockout_Failure2'
+  
+  WHEN (DATE_DIFF(CAST(la.application_start_date AS DATE), SAFE_CAST(lp.Last_sale_date AS DATE), day) <= 90)  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Last_Sale_Date_Knockout_Failure1'
+  WHEN (DATE_DIFF(CAST(la.application_start_date AS DATE), SAFE_CAST(lp.Last_sale_date AS DATE), day) > 90)  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'LAST_SALE_DATE' THEN 'Last_Sale_Date_Knockout_Failure2'
+ 
+  WHEN (f0.mortgage_status_indicator IN ('F','U') AND f0.mortgage_payoff_date IS NULL
+  AND f0.mortgage_recording_date IS NOT NULL AND f0.mortgage_origination_date IS NOT NULL 
+  AND SAFE_CAST(f0.mortgage_origination_date AS DATE) >= SAFE_CAST(f0.Last_sale_date AS DATE)
+  AND SAFE_CAST(f0.mortgage_recording_date AS DATE) >= SAFE_CAST(f0.Last_sale_date AS DATE) 
+  AND f0.mortgage_amount IS NOT NULL) AND  (la.application_uuid_value IN (SELECT DISTINCT(application_uuid_value) FROM rpt_staging.stg_uw_decline_reasons
+  WHERE decline_reason_code = 'FORECLOSURE')) IS FALSE 
+  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Foreclosure_Knockout_Failure1'
+  
+  WHEN (MTF8169 > 60
+  AND ((f0.mortgage_status_indicator NOT IN ('F','U')) 
+  OR (f0.mortgage_status_indicator IN ('F','U') AND (f0.mortgage_payoff_date IS NOT NULL OR (f0.mortgage_recording_date IS NULL OR f0.mortgage_origination_date IS NULL) OR 
+  SAFE_CAST(f0.mortgage_origination_date AS DATE) < SAFE_CAST(f0.Last_sale_date AS DATE) OR 
+  SAFE_CAST(f0.mortgage_recording_date AS DATE) < SAFE_CAST(f0.Last_sale_date AS DATE) OR f0.mortgage_amount IS NULL))))
+  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'FORECLOSURE' THEN 'Foreclosure_Knockout_Failure2'
+  ELSE 'PASS'
+  END AS Property_Eligibility_Knockout_Failure_Check,
+  la.application_uuid_value IN (SELECT DISTINCT(application_uuid_value) FROM rpt_staging.stg_uw_decline_reasons
+  WHERE decline_reason_code = 'FORECLOSURE') AS Foreclosure_Bool,
+  
+  ls.lien_summary.involuntary_lien.lien_on_property AS Involuntary_Lien_On_Property, 
+  ls.lien_summary.hoa_lien.lien_on_property AS HOA_Lien_On_Property,
+  il.involuntary_lien_info.involuntary_lien_item.document_category AS Document_Category, 
+  il.involuntary_lien_info.involuntary_lien_item.document_description AS Document_Description, 
+  CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) AS Document_Date,
+  il.involuntary_lien_info.state_code AS State_Code, 
+  ls.property_status_indicators.is_pace_lien AS Is_Pace_Lien,
+  CASE WHEN ls.lien_summary.involuntary_lien.lien_on_property IS TRUE OR ls.lien_summary.hoa_lien.lien_on_property IS TRUE THEN 'YES' ELSE 'NO' END AS Involuntary_Lien_Exists, 
+  CASE WHEN (
+  COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 680 AND 
+ (il.involuntary_lien_info.involuntary_lien_item.document_category = 'NOTICE' AND il.involuntary_lien_info.involuntary_lien_item.document_description = 'NOTICE') 
+  AND ls.property_status_indicators.is_pace_lien IS FALSE) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception1_Exists, 
+  CASE WHEN 
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'FEDERAL TAX LIEN' AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
+  OR
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'MECHANICS LIEN' AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 24) IS TRUE
+  OR
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('NH', 'IL', 'CA', 'NJ', 'VA', 'WI', 'FL', 'HI', 'CT', 'OH', 'VT', 'IA', 'KY', 'LA', 'MD') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 240) IS TRUE
+  OR 
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('AL', 'AZ', 'AR', 'DE', 'IN', 'ME', 'MA', 'MN', 'NM', 'TN', 'WA', 'WY', 'WV', 'KS', 'SC', 'GA', 'OK', 'NE') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
+  OR  
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('SD', 'UT', 'ID', 'CO', 'MI', 'MS') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE
+  OR  
+  (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('MD', 'DC', 'NM', 'KY', 'ME', 'MA', 'CT', 'NJ', 'RI') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 240) IS TRUE
+  OR
+  (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('AR', 'AL', 'IA','DE', 'IN', 'MN', 'TN', 'WA', 'WV', 'SC', 'CA', 'FL', 'VA', 'WI', 'SD', 'LA', 'TX', 'MT', 'NC', 'OR', 'MO', 'AZ', 'UT', 'VT', 'AK') AND 
+  DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
+  OR 
+  (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('WY', 'KS', 'OK', 'OH', 'ID', 'MI', 'PA', 'NE', 'NH', 'CO', 'NV', 'GA', 'IL', 'MI')
+  AND 
+  DATE_DIFF(Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception2_Exists, 
+  
+  CASE WHEN (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('FEDERAL TAX LIEN', 'MECHANICS LIEN', 'STATE TAX LIEN','JUDGMENT', 'LIEN') AND  CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) IS NULL) THEN 'YES' ELSE 'NO' END AS Exception3_Exists,  
+  la.application_uuid_value IN (SELECT DISTINCT(application_uuid_value) FROM rpt_staging.stg_uw_decline_reasons WHERE decline_reason_code = 'INV_TAXLIEN') AS App_Inv_Bool,
+  DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) AS Date_Difference_By_Month,  
+  la.pre_loan_cltv AS Pre_Loan_CLTV,
+  la.Pre_Loan_Adj_CLTV,
+  la.Pre_Loan_DTI,
+ 
+  CASE 
+  WHEN (App_Amount < 15000 
+  OR 
+  (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 620 AND 679 AND App_Amount > 50000) 
+  OR 
+  (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 680 AND 759 AND App_Amount > 100000)
+  OR 
+  (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >=760 AND App_Amount > 150000)) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Loan_Size_Knockout_Failure1' 
+  
+  WHEN ((COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 620 AND 679 AND  App_Amount BETWEEN 15000 AND 50000) 
+  OR 
+  (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 680 AND 759 AND App_Amount BETWEEN 50000 AND 100000)
+  OR 
+  (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >=760 AND App_Amount BETWEEN 100000 AND 150000)) AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND  r.decline_reason_code = 'DTI' AND la.pre_loan_DTI < 0.43  THEN 'Loan_Size_Knockout_Failure2' 
+   
+  WHEN ((COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 620 AND DATE(application_start_date) < '2020-04-28' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 620  AND CAST(in_home_date AS DATE) < '2020-04-28' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 680 AND la.profile_state != 'OK' AND DATE(application_start_date) BETWEEN '2020-04-28' AND '2020-05-15' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 680 AND la.profile_state != 'OK' AND CAST(in_home_date AS DATE) BETWEEN '2020-04-28' AND '2020-05-15' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 640 AND la.profile_state != 'OK' AND DATE(application_start_date) >= '2020-05-16' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) ))
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 640 AND la.profile_state != 'OK' AND CAST(in_home_date AS DATE) >= '2020-05-16' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 720 AND la.profile_state = 'OK' AND DATE(application_start_date) >= '2020-04-28' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) ))
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) < 720 AND la.profile_state = 'OK' AND CAST(in_home_date AS DATE) >= '2020-04-28' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) > 850 OR COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) IN (9000,9001,9002,9003))
+  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'FICO_Knockout_Failure1'
+  
+  WHEN ((COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 620 AND DATE(application_start_date) < '2020-04-28' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 620  AND CAST(in_home_date AS DATE) < '2020-04-28' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 680 AND la.profile_state != 'OK' AND DATE(application_start_date) BETWEEN '2020-04-28' AND '2020-05-15' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 680 AND la.profile_state != 'OK' AND CAST(in_home_date AS DATE) BETWEEN '2020-04-28' AND '2020-05-15' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 640 AND la.profile_state != 'OK' AND DATE(application_start_date) >= '2020-05-16' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) ))
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 640 AND la.profile_state != 'OK' AND CAST(in_home_date AS DATE) >= '2020-05-16' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) 
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 720 AND la.profile_state = 'OK' AND DATE(application_start_date) >= '2020-04-28' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) ))
+  OR (COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 720 AND la.profile_state = 'OK' AND CAST(in_home_date AS DATE) >= '2020-04-28' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) > CAST(la.application_start_date AS DATE)) )
+  AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) <= 850 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) NOT IN (9000,9001,9002,9003)
+  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'CREDITSCORE' THEN 'FICO_Knockout_Failure2'
+ 
+  WHEN MTA2126 > 0 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Delinquent_30mdy_6mo_Knockout_Failure1' 
+  WHEN MTA2126 <= 0 AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'MORT_TRADES_DELQ' THEN 'Delinquent_30mdy_6mo_Knockout_Failure2'
+  
+  WHEN COL3211 > 0 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Non_Medical_Collections_Knockout_Failure1'
+  WHEN COL3211 <= 0 AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED')  AND r.decline_reason_code = 'COLLECTION' THEN 'Non_Medical_Collections_Knockout_Failure2'
+  
+  WHEN ALM6270 >= 60 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Worst_Trade_Status_12mo_non_medical_Knockout_Failure1'
+  WHEN ALM6270 < 60 AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'DELQ60_12' THEN 'Worst_Trade_Status_12mo_non_medical_Knockout_Failure2'
+  
+  WHEN IQT9425 - ( IQM9415 + IQA9415 ) >= 6 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Inquiries_Num_6mo_Knockout_Failure1'
+  WHEN IQT9425 - ( IQM9415 + IQA9415 ) < 6 AND IQF9415 <= 2 AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'INQ3MONTHS' THEN 'Inquiries_Num_6mo_Knockout_Failure2'
+   
+  WHEN IQF9415 > 2 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Finance_Inquiries_Num_No_Exceed_2_Knockout_Failure1'
+  WHEN IQT9425 - ( IQM9415 + IQA9415 ) < 6 AND IQF9415 <= 2 AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'INQ3MONTHS' THEN 'Finance_Inquiries_Num_No_Exceed_2_Knockout_Failure2'
+  
+  WHEN (
+  (ALL9220 <= 60 AND DATE(application_start_date) >= '2020-04-02' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (ALL9220 <= 60 AND CAST(in_home_date AS DATE) >= '2020-04-02' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)) 
+  OR (ALL9220 <= 24 AND DATE(application_start_date) < '2020-04-02' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) ))
+  OR (ALL9220 <= 24 AND CAST(in_home_date AS DATE) < '2020-04-02' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)))
+  AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'No_Bankruptcy_24mo_Knockout_Failure1'
+  
+  WHEN ((ALL9220 > 60 AND (ALL9120 < 1 OR ALL9120 <= (ALL9121 + ALL9122)) AND ((DATE(application_start_date) >= '2020-04-02' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (CAST(in_home_date AS DATE) >= '2020-04-02' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))))
+  OR (ALL9220 > 24 AND (DATE(application_start_date) < '2020-04-02' AND ((la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) ))
+  OR (CAST(in_home_date AS DATE) < '2020-04-02' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE))))) 
+  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code =  'BANKRUPTCY' THEN 'No_Bankruptcy_24mo_Knockout_Failure2'
+ 
+  
+  WHEN (ALL9120 >= 1 AND ALL9120 > (ALL9121 + ALL9122) AND ((DATE(application_start_date) >= '2020-04-02' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (CAST(in_home_date AS DATE) >= '2020-04-02' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)))) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Non_Discharged/Dismissed Bankruptcy Filings_Knockout_Failure1'
+  WHEN (ALL9120 < 1 OR ALL9120 <= (ALL9121 + ALL9122) AND ALL9220 > 60 AND ((DATE(application_start_date) >= '2020-04-02' AND (la.has_promo_code = 'N' OR (la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) < CAST(la.application_start_date AS DATE)) )) 
+  OR (CAST(in_home_date AS DATE) >= '2020-04-02' AND la.has_promo_code = 'Y' AND CAST(respond_by_date AS DATE) >= CAST(la.application_start_date AS DATE)))) AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'BANKRUPTCY' THEN 'Non_Discharged/Dismissed Bankruptcy Filings_Knockout_Failure2'
+  
+  WHEN MTF8169 <= 60 AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'No_Foreclosure_60mo_Knockout_Failure1'  
+
+  WHEN (MTF8169 > 60
+  AND ((f0.mortgage_status_indicator NOT IN ('F','U')) 
+  OR (f0.mortgage_status_indicator IN ('F','U') AND (f0.mortgage_payoff_date IS NOT NULL OR (f0.mortgage_recording_date IS NULL AND f0.mortgage_origination_date IS NULL) OR 
+  SAFE_CAST(f0.mortgage_origination_date AS DATE) < SAFE_CAST(f0.Last_sale_date AS DATE) OR 
+  SAFE_CAST(f0.mortgage_recording_date AS DATE) <SAFE_CAST(f0.Last_sale_date AS DATE) OR f0.mortgage_amount IS NULL))))
+  AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'FORECLOSURE' THEN 'No_Foreclosure_60mo_Knockout_Failure2'
+
+  WHEN s.type = 'FACTA_HIT' AND CAST(subcode AS FLOAT64) IN (16,23,26,28,31,33) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'FACTA_Auto_Knockout_Failure1' 
+  WHEN s.type = 'FACTA_HIT' AND CAST(subcode AS FLOAT64) NOT IN (16,23,26,28,31,33) AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'FACTA_HIT' THEN 'FACTA_Auto_Knockout_Failure2'
+  
+  WHEN s.type = 'FRAUD_HIT' AND CAST(subcode AS FLOAT64) IN (5,25,13,14,27) AND la.uw_decision_decision != 'DECLINE' AND la.status NOT IN ('DECLINED', 'CANCELLED') THEN 'Experian_Fraud_Shield_Knockouts_Failure1'
+  WHEN s.type = 'FRAUD_HIT' AND CAST(subcode AS FLOAT64) NOT IN (5,25,13,14,27) AND la.uw_decision_decision = 'DECLINE' AND la.status IN ('DECLINED', 'CANCELLED') AND r.decline_reason_code = 'FRAUD' THEN 'Experian_Fraud_Shield_Knockouts_Failure2'
+ 
+  ELSE 'PASS'
+  END AS Credit_Hard_Knockout_Failure_Check,
+ 
+  (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) AS Z,
+    
+  CASE 
+  WHEN  BCC5830 <= BCX5830 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 620 AND 739 THEN  ROUND(( (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) + (BAX5030 - BCX5030)*0.025 + RTR5030 * 0.025), 4)
+  WHEN BCC5830 <= BCX5830 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 740 THEN ROUND( (((((BCC5830 - BCC5838)/0.04)*0.025) + BCC5838) - (BCC5830 - BCX5830)) + RTR5030 * 0.025, 4)
+  END AS T_Monthly_Revolving_Debt,
+  
+  CASE 
+  WHEN BCC5830 <= BCX5830 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 620 AND 739 THEN ROUND(ILN5820 -ILN5824, 4)
+  WHEN BCC5830 <= BCX5830 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 740 THEN ROUND(AUA5820 + STU5020*0.0035 + (ILN5820 - (STU5820 + AUA5820)) - ILN5824,4)
+  END AS T_Monthly_Installment_Debt,
+  CASE 
+  WHEN BCC5830 <= BCX5830 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) BETWEEN 620 AND 739 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
+  WHEN BCC5830 <= BCX5830 AND COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) >= 740 THEN ROUND(MTF5820 + MTS5820 + HLC5820, 4)
+  END AS T_Monthly_Mortgage_Debt 
+FROM reporting.lkup_application la
+LEFT JOIN reporting.application_details ad ON ad.application_uuid_value = la.application_uuid_value
+LEFT JOIN reporting.lkup_datatree_summary ls ON ls.application_uuid.value = la.application_uuid_value
+LEFT JOIN (SELECT * FROM(SELECT 
+  ROW_NUMBER() OVER(PARTITION BY application_uuid_value ORDER BY kafka_timestamp DESC) AS r1,
+  application_uuid_value,uw_packet_home_amount,age,avm_fsd, land_use_code, property_acres,uw_packet_monthly_income, all_mort_balance,tot_open_balance,uw_packet_amt_owed,all_mort_count FROM rpt_staging.stg_uw_decision
+ORDER BY application_uuid_value, 	kafka_timestamp DESC) WHERE r1 = 1) sud ON sud.application_uuid_value = la.application_uuid_value
+LEFT JOIN (SELECT 
+  DISTINCT(application_uuid_value), mortgage_lien_position, mortgage_status_indicator, first_mortgage_date, Last_Sale_Date, mortgage_payoff_date, 
+  mortgage_origination_date, mortgage_recording_date,mortgage_amount FROM(
+SELECT 
+  application_uuid.value AS Application_UUID_Value, 
+  f.mortgage_lien_position,
+  f.mortgage_status_indicator,
+  financial_history.recording_information.first_mortgage_date.value AS first_mortgage_date,
+  COALESCE(avm.last_sale_date.value, current_transfer.sale_date.value , last_market_sale.sale_date.value) AS Last_Sale_Date,
+  SAFE_CAST(f.mortgage_payoff_date.value AS DATE) AS mortgage_payoff_date,      
+  f.mortgage_origination_date.value AS mortgage_origination_date,
+  f.mortgage_recording_date.value AS mortgage_recording_date,
+  f.mortgage_amount.amount AS mortgage_amount
+FROM staging_evolved.property
+LEFT JOIN UNNEST(financial_history.finance_history_attributes) f) lp
+WHERE (lp.mortgage_status_indicator IN ('F','U')
+  AND lp.mortgage_payoff_date IS NULL
+  AND (lp.mortgage_recording_date IS NOT NULL AND lp.mortgage_origination_date IS NOT NULL) 
+  AND  SAFE_CAST(lp.mortgage_origination_date AS DATE) >= SAFE_CAST(lp.Last_sale_date AS DATE)
+  AND  SAFE_CAST(lp.mortgage_recording_date AS DATE) >= SAFE_CAST(lp.Last_sale_date AS DATE) AND lp.mortgage_amount IS NOT NULL)
+ORDER BY application_uuid_value) f0 ON f0.application_uuid_value = la.application_uuid_value
+LEFT JOIN reporting.lkup_datatree_involuntary_liens il ON il.application_uuid.value = la.application_uuid_value
+LEFT JOIN (SELECT * FROM(
+SELECT 
+  ROW_NUMBER() OVER (PARTITION BY uuid.value, application_uuid.value ORDER BY kafka_timestamp_ts DESC,(audit_fields.created_date.seconds+   (audit_fields.created_date.nanos/1e9)) DESC) AS R5,
+  application_uuid.value AS Application_UUID_Value, 
+  uuid.value as Property_UUID_Value,
+  SAFE_CAST(COALESCE(avm.last_sale_date.value, current_transfer.sale_date.value , last_market_sale.sale_date.value) AS DATE) AS Last_Sale_Date,
+  COALESCE(SAFE_CAST(avm.fsd AS FLOAT64),  SAFE_CAST(prequal_avm.fsd AS FLOAT64)) FSD,
+  property_site.acres AS Acres,
+  SAFE_CAST(avm.value.amount AS FLOAT64) avm_value_amount,
+  SAFE_CAST(prequal_avm.value.amount AS FLOAT64) AS prequal_avm_amount,
+  COALESCE(NULLIF(avm.land_use_code,0), NULLIF(prequal_avm.land_use_code,0), property_site.land_use_code) Land_Use_Code,
+FROM staging_evolved.property
+LEFT JOIN UNNEST( financial_history.finance_history_attributes) f
+) 
+WHERE R5= 1) lp ON lp.Application_uuid_value = la.application_uuid_value
+LEFT JOIN staging_evolved.property_data_proto_external_property_datatree_total_view_report_r1 dt ON dt.application_uuid.value = la.application_uuid_value
+LEFT JOIN UNNEST(transaction) AS t
+LEFT JOIN (SELECT * FROM(SELECT ROW_NUMBER() OVER(PARTITION BY application_uuid_value ORDER BY credit_type) AS r2, application_uuid_value, credit_report_run_date, credit_type,
+  SAFE_CAST(MTA2126 AS FLOAT64) AS MTA2126,
+  SAFE_CAST(COL3211 AS FLOAT64) AS COL3211,
+  SAFE_CAST(ALM6270 AS FLOAT64) AS ALM6270, 
+  SAFE_CAST(IQT9425 AS FLOAT64) AS IQT9425,
+  SAFE_CAST(IQM9415 AS FLOAT64) AS IQM9415, 
+  SAFE_CAST(IQA9415 AS FLOAT64) AS IQA9415,
+  SAFE_CAST(IQF9415 AS FLOAT64) AS IQF9415,
+  SAFE_CAST(ALL9220 AS FLOAT64) AS ALL9220,
+  SAFE_CAST(ALL9120 AS FLOAT64) AS ALL9120,
+  SAFE_CAST(ALL9121 AS FLOAT64) AS ALL9121,
+  SAFE_CAST(ALL9122 AS FLOAT64) AS ALL9122, 
+  SAFE_CAST(MTF8169 AS FLOAT64) AS MTF8169,
+  SAFE_CAST(BCC5830 AS FLOAT64) AS BCC5830, 
+  SAFE_CAST(BCC5838 AS FLOAT64) AS BCC5838, 
+  SAFE_CAST(BCX5830 AS FLOAT64) AS BCX5830,
+  SAFE_CAST(ALX5830 AS FLOAT64) AS ALX5830, 
+  SAFE_CAST(ILN5824 AS FLOAT64) AS ILN5824, 
+  SAFE_CAST(BAX5030 AS FLOAT64) AS BAX5030, 
+  SAFE_CAST(BCX5030 AS FLOAT64) AS BCX5030, 
+  SAFE_CAST(RTR5030 AS FLOAT64) AS RTR5030, 
+  SAFE_CAST(ILN5820 AS FLOAT64) AS ILN5820, 
+  SAFE_CAST(AUA5820 AS FLOAT64) AS AUA5820, 
+  SAFE_CAST(STU5020 AS FLOAT64) AS STU5020, 
+  SAFE_CAST(STU5820 AS FLOAT64) AS STU5820, 
+  SAFE_CAST(MTF5820 AS FLOAT64) AS MTF5820, 
+  SAFE_CAST(MTS5820 AS FLOAT64) AS MTS5820, 
+  SAFE_CAST(HLC5820 AS FLOAT64) AS HLC5820, 
+  SAFE_CAST(MTA5020 AS FLOAT64) AS MTA5020
+FROM reporting.lkup_credit_attr WHERE product_type ='HELOC' ORDER BY application_uuid_value) WHERE R2 =1) lca ON lca.application_uuid_value = la.application_uuid_value
+LEFT JOIN reporting.lkup_offer_codes lc ON lc.offer_code = la.promo_code
+LEFT JOIN rpt_staging.stg_uw_decline_reasons r ON r.application_uuid_value = la.application_uuid_value
+LEFT JOIN (SELECT application_uuid_value,(lien_position + 1) AS Figure_Lien_Position FROM (SELECT application_uuid.value AS application_uuid_value, l.lien_position, ROW_NUMBER() OVER (PARTITION BY application_uuid.value ORDER BY l.lien_position DESC) AS R4 FROM staging_evolved.property_data_proto_external_liens_r1
+LEFT JOIN UNNEST(liens)  AS l
+WHERE product_type = 'HELOC')
+WHERE R4 = 1) p ON p.application_uuid_value = la.application_uuid_value
+LEFT JOIN(SELECT * FROM (SELECT application_uuid.value AS application_uuid_value, l.tradeline_matched, l.tradeline_match_type, total_current_balance.amount AS total_current_balance_amount, ROW_NUMBER() OVER (PARTITION BY application_uuid.value ORDER BY l.tradeline_matched DESC) AS R3 FROM staging_evolved.property_data_proto_external_liens_r1
+LEFT JOIN UNNEST(liens) AS l
+WHERE product_type = 'HELOC')
+WHERE R3 = 1) pl ON pl.application_uuid_value = la.application_uuid_value
+LEFT JOIN ( SELECT * FROM(
+  SELECT 
+  *,
+  ROW_NUMBER() OVER (PARTITION BY application_uuid_value, subcode ORDER BY kafka_timestamp DESC) AS r
+  FROM rpt_staging.stg_credit_soft_elig_factors
+  WHERE type IN ('FRAUD_HIT','FACTA_HIT') AND subcode IS NOT NULL)
+  WHERE r = 1 ) s ON s.application_uuid_value = la.application_uuid_value)
+WHERE App_Start_Date > '2020-02-27' AND 
+(Credit_Hard_Knockout_Failure_Check != 'PASS' OR Property_Eligibility_Knockout_Failure_Check != 'PASS')
+ORDER BY App_Start_Date DESC)
+WHERE R = 1 
+ORDER BY App_Start_Date DESC, App_UUID),
+
+C AS (
+SELECT *,
+  CASE WHEN COALESCE (T_AVM_Value, 0) != 0 THEN ROUND(Amount_Owed/T_AVM_Value,4) ELSE NULL END AS T_Pre_Loan_CLTV,
+  CASE WHEN COALESCE(T_Adjusted_Collateral_Value) != 0 THEN ROUND(Amount_Owed/T_Adjusted_Collateral_Value,4) ELSE NULL END AS T_Pre_Loan_Adj_CLTV
+FROM(SELECT 
+  *,
+  CASE
+  WHEN T_AVM_Value < 100000 THEN T_AVM_Value*0.5
+  WHEN (T_AVM_Value >= 100000 AND T_FSD <= 13 AND ((App_Start_Date > '2020-05-16' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date > '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)) ) THEN T_AVM_Value
+  WHEN (T_AVM_Value >= 100000 AND T_FSD > 13 AND ((App_Start_Date > '2020-05-16' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date > '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)) ) THEN T_AVM_Value*(1- AVM_FSD/200)
+  WHEN (T_AVM_Value >= 100000 AND T_FSD <= 13 AND land_use_code != 112 AND ((App_Start_Date BETWEEN '2020-03-21' AND '2020-05-15' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date BETWEEN '2020-03-21' AND '2020-05-15' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)) ) 
+  OR (T_AVM_Value >= 100000 AND T_FSD <= 13   AND ((App_Start_Date < '2020-03-21' AND land_use_code != 112 AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date < '2020-03-21' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) THEN T_AVM_Value
+  WHEN ((T_AVM_Value >= 100000 AND T_FSD > 13  AND land_use_code != 112 AND AVM_FSD <= 20 AND ((App_Start_Date BETWEEN '2020-03-21' AND '2020-05-15' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date BETWEEN '2020-03-21' AND '2020-05-15' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)) ) 
+  OR (T_AVM_Value >= 100000 AND T_FSD > 13 AND ((App_Start_Date < '2020-03-21'AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date < '2020-03-21' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))) 
+  THEN T_AVM_Value*(1- AVM_FSD/200)
+  WHEN ((T_AVM_Value >= 100000 AND AVM_FSD > 20 AND land_use_code != 112) OR ( T_AVM_Value >= 100000 AND land_use_code = 112 )) AND ((App_Start_Date >= '2020-03-21'AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date))) OR (in_home_date >= '2020-03-21' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)) THEN T_AVM_Value *(1- T_FSD/100)
+  END AS T_Adjusted_Collateral_Value,
+  
+  CASE 
+  WHEN COALESCE(Stated_Monthly_Income,0) != 0 AND  COALESCE(App_Term,0) != 0 THEN ROUND(T_Monthly_Debt/(Stated_Monthly_Income + (T_Total_Assets*0.04/12)/(1-POWER((1+0.04/12),(- App_Term*12)))),4) 
+  WHEN COALESCE(Stated_Monthly_Income,0) != 0 AND COALESCE(App_Term,0) = 0 THEN ROUND(T_Monthly_Debt/Stated_Monthly_Income,4)
+  END AS T_DTI,
+  CASE
+   WHEN ((Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO' AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL) OR Document_Date IS NULL) AND App_Inv_Bool IS FALSE AND Decline_Code != 'INV_TAXLIEN' AND (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE') 
+   THEN 'Involuntary_Lien_Knockout_Failure(DT returns)1'
+   WHEN ((Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO' AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NULL AND Document_Description IS NULL) OR Document_Date IS NULL)  AND App_Inv_Bool IS FALSE  AND Decline_Code != 'INV_TAXLIEN' AND (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE') 
+   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)1'
+   WHEN  ((Involuntary_Lien_Exists = 'NO' OR (Involuntary_Lien_Exists = 'YES' AND ((Exception1_Exists = 'YES' OR  Exception2_Exists = 'YES' OR Exception3_Exists = 'YES') AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL AND Document_Date IS NOT NULL))) AND App_Inv_Bool IS TRUE
+   AND Decline_Code = 'INV_TAXLIEN' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE') THEN 'Involuntary_Lien_Knockout_Failure(DT returns)2'
+   WHEN Involuntary_Lien_Exists = 'YES' AND ((Exception1_Exists = 'YES' OR Exception2_Exists = 'YES' OR Exception3_Exists = 'YES') AND Document_Category IS NULL AND Document_Description IS NULL AND Document_Date IS NOT NULL) AND App_Inv_Bool IS TRUE
+   AND Decline_Code = 'INV_TAXLIEN' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE'
+   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)2'
+   ELSE 'PASS'
+  END AS Involuntary_Lien_Decline_Check
+FROM CP)
+ORDER BY App_Start_Date DESC, App_UUID),
+
+CC AS (SELECT *,
+  CASE
+  WHEN ((Amount_Owed = 0 AND (T_Pre_Loan_CLTV > 0.5 OR T_Pre_Loan_Adj_CLTV > 0.5))
+  OR
+  (Amount_Owed > 0 AND FICO >=620 AND FICO <660 AND (T_Pre_Loan_CLTV > 0.65 OR T_Pre_Loan_Adj_CLTV > 0.65) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))))
+  OR 
+  (Amount_Owed > 0 AND FICO >=660 AND FICO <680 AND (T_Pre_Loan_CLTV > 0.75 OR T_Pre_Loan_Adj_CLTV > 0.75) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) 
+  OR 
+  (Amount_Owed > 0 AND FICO >=640 AND FICO <680 AND (T_Pre_Loan_CLTV > 0.65 OR T_Pre_Loan_Adj_CLTV > 0.65) AND ((App_Start_Date >= '2020-05-16'  AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) 
+  OR 
+  (Amount_Owed > 0 AND FICO >=620 AND FICO <680 AND (((T_Pre_Loan_CLTV > 0.75 OR T_Pre_Loan_Adj_CLTV > 0.75) AND ((App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-18' AND in_home_date >= '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND ((App_Start_Date < '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))))
+  OR 
+  (Amount_Owed > 0 AND FICO >=680 AND FICO <720 AND (((T_Pre_Loan_CLTV > 0.85 OR T_Pre_Loan_Adj_CLTV > 0.85) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND ((App_Start_Date < '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV > 0.9 OR T_Pre_Loan_Adj_CLTV > 0.9) AND ((App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-18' AND in_home_date >= '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))
+  OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND ((App_Start_Date >= '2020-04-30' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-04-30' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) ))
+  OR
+  (Amount_Owed > 0 AND FICO >=720 AND FICO <760 AND (((T_Pre_Loan_CLTV > 0.9 OR T_Pre_Loan_Adj_CLTV > 0.9) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND ((App_Start_Date >= '2020-04-30' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-04-30' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) ))
+  OR 
+  (Amount_Owed > 0 AND FICO >=720 AND FICO <850 AND (((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND ((App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-18' AND in_home_date >= '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND ((App_Start_Date < '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))))
+  OR
+  (Amount_Owed > 0 AND FICO >=760 AND FICO <850 AND (((T_Pre_Loan_CLTV > 0.95 OR T_Pre_Loan_Adj_CLTV > 0.95) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV > 0.8 OR T_Pre_Loan_Adj_CLTV > 0.8) AND ((App_Start_Date >= '2020-04-30' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-04-30' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))))))
+  AND 
+  (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE' AND Decline_code != 'CLTV') THEN 'CLTV_Decline_Failure1'
+  
+  WHEN ((Amount_Owed = 0 AND (T_Pre_Loan_CLTV <= 0.5 AND T_Pre_Loan_Adj_CLTV <= 0.5))
+  OR
+  (Amount_Owed > 0 AND FICO >=620 AND FICO <660 AND (T_Pre_Loan_CLTV <= 0.65 AND T_Pre_Loan_Adj_CLTV <= 0.65) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))))
+  OR 
+  (Amount_Owed > 0 AND FICO >=660 AND FICO <680 AND (T_Pre_Loan_CLTV <= 0.75 AND T_Pre_Loan_Adj_CLTV <= 0.75) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) 
+  OR 
+  (Amount_Owed > 0 AND FICO >=640 AND FICO <680 AND (T_Pre_Loan_CLTV <= 0.65 AND T_Pre_Loan_Adj_CLTV <= 0.65) AND ((App_Start_Date >= '2020-05-16'  AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) 
+  OR 
+  (Amount_Owed > 0 AND FICO >=620 AND FICO <680 AND (((T_Pre_Loan_CLTV <= 0.75 AND T_Pre_Loan_Adj_CLTV <= 0.75) AND ((App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-18' AND in_home_date >= '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV <= 0.8 AND T_Pre_Loan_Adj_CLTV <= 0.8) AND ((App_Start_Date < '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))))
+  OR 
+  (Amount_Owed > 0 AND FICO >=680 AND FICO <720 AND (((T_Pre_Loan_CLTV <= 0.85 AND T_Pre_Loan_Adj_CLTV <= 0.85) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV <= 0.95 AND T_Pre_Loan_Adj_CLTV <= 0.95) AND ((App_Start_Date < '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV <= 0.9 AND T_Pre_Loan_Adj_CLTV <= 0.9) AND ((App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-18' AND in_home_date >= '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))
+  OR ((T_Pre_Loan_CLTV <= 0.8 AND T_Pre_Loan_Adj_CLTV <= 0.8) AND ((App_Start_Date >= '2020-04-30' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-04-30' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) ))
+  OR
+  (Amount_Owed > 0 AND FICO >=720 AND FICO <760 AND (((T_Pre_Loan_CLTV <= 0.9 AND T_Pre_Loan_Adj_CLTV <= 0.9) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV <= 0.8 AND T_Pre_Loan_Adj_CLTV <= 0.8) AND ((App_Start_Date >= '2020-04-30' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-04-30' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) ))
+  OR 
+  (Amount_Owed > 0 AND FICO >=720 AND FICO <850 AND (((T_Pre_Loan_CLTV <= 0.95 AND T_Pre_Loan_Adj_CLTV <= 0.95) AND ((App_Start_Date < '2020-03-18' AND App_Start_Date >= '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-18' AND in_home_date >= '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV <= 0.95 AND T_Pre_Loan_Adj_CLTV <= 0.95) AND ((App_Start_Date < '2020-03-05' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-03-05' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))))
+  OR
+  (Amount_Owed > 0 AND FICO >=760 AND FICO <850 AND (((T_Pre_Loan_CLTV <= 0.95 AND T_Pre_Loan_Adj_CLTV <= 0.95) AND ((App_Start_Date < '2020-04-30' AND App_Start_Date >= '2020-03-18' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-04-30' AND in_home_date >= '2020-03-18' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) OR ((T_Pre_Loan_CLTV <= 0.8 AND T_Pre_Loan_Adj_CLTV <= 0.8) AND ((App_Start_Date >= '2020-04-30' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-04-30' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))))))
+  AND 
+  (App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE' AND Decline_code = 'CLTV') THEN 'CLTV_Decline_Failure2'  
+  ELSE 'PASS'
+  END AS CLTV_Decline_Failure_Check,
+  
+  CASE 
+  WHEN ROUND(Pre_Loan_CLTV,3) = ROUND(T_Pre_Loan_CLTV,3) THEN 'Match'
+  WHEN ROUND(Pre_Loan_CLTV,3) != ROUND(T_Pre_Loan_CLTV,3) THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS CLTV_Match,
+  CASE 
+  WHEN  ROUND(Pre_Loan_DTI,3) = ROUND(T_DTI,3) THEN 'Match'
+  WHEN  ROUND(Pre_Loan_DTI,3) != ROUND(T_DTI,3) THEN 'Unmatch'
+  ELSE 'Unavailable'
+  END AS DTI_Match,
+ 
+  CASE
+  WHEN ((FICO BETWEEN 620 AND 739 AND T_DTI > 0.45 AND (( App_Start_Date >= '2020-05-16' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) 
+  OR 
+  (FICO BETWEEN 620 AND 739 AND T_DTI > 0.43 AND (( App_Start_Date < '2020-05-16' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))
+  OR 
+  (FICO >= 740 AND T_DTI > 0.5)) 
+  AND App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE' AND Decline_code != 'DTI' THEN 'DTI_Decline_Failure1'
+  WHEN ((FICO BETWEEN 620 AND 739 AND T_DTI <= 0.45 AND (( App_Start_Date >= '2020-05-16' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date >= '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date))) 
+  OR 
+  (FICO BETWEEN 620 AND 739 AND T_DTI <= 0.43 AND (( App_Start_Date < '2020-05-16' AND (has_promo_code = 'N' OR (has_promo_code = 'Y' AND respond_by_date < App_Start_Date) ))
+  OR (in_home_date < '2020-05-16' AND has_promo_code = 'Y' AND respond_by_date >= App_Start_Date)))
+  OR 
+  (FICO >= 740 AND T_DTI <= 0.5)) 
+  AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE' AND Decline_code = 'DTI' THEN 'DTI_Decline_Failure2'
+  ELSE 'PASS'
+  END AS DTI_Decline_Failure_Check
+FROM C
+WHERE App_Start_Date > '2020-02-27')
+
+SELECT * FROM
+(SELECT 
+  *,
+  CASE  
+  WHEN (Involuntary_Lien_Decline_Check LIKE '%1' OR Property_Eligibility_Knockout_Failure_Check LIKE '%1' OR Credit_Hard_Knockout_Failure_Check LIKE '%1' OR CLTV_Decline_Failure_Check LIKE '%1' OR DTI_Decline_Failure_Check LIKE '%1') THEN 'Apps should have been declined, but were not declined'
+  WHEN (Involuntary_Lien_Decline_Check LIKE '%2'  AND Property_Eligibility_Knockout_Failure_Check LIKE '%2' AND Credit_Hard_Knockout_Failure_Check LIKE '%2' AND CLTV_Decline_Failure_Check LIKE '%2' AND DTI_Decline_Failure_Check ='PASS') THEN 'Apps should have NOT been declined, but were declined'
+  ELSE 'Apps were declined correctly'
+  END AS  UW_Decline_Failure_Check
+FROM CC)
+WHERE UW_Decline_Failure_Check != 'Apps were declined correctly'
+ORDER BY App_Start_Date DESC
