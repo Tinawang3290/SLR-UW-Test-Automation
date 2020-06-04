@@ -1,0 +1,70 @@
+
+WITH F0 AS (SELECT
+  DATE(la.application_start_date) AS App_Created_Date,
+  la.application_uuid_value AS App_UUID,
+  la.app_amount AS App_Amount,
+  COALESCE(CAST(la.credit_hard_fico AS FLOAT64), CAST(la.credit_soft_fico AS FLOAT64)) AS FICO,
+  la.status  AS App_Status,
+  la.uw_decision_decision AS UW_Decision,
+  la.adverse_action_declineReasons AS Decline_Reasons,
+  S.lien_summary.involuntary_lien.lien_on_property AS Involuntary_Lien_On_Property, 
+  S.lien_summary.hoa_lien.lien_on_property AS HOA_Lien_On_Property,
+  il.involuntary_lien_info.involuntary_lien_item.document_category AS Document_Category, 
+  il.involuntary_lien_info.involuntary_lien_item.document_description AS Document_Description, 
+  CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) AS Document_Date,
+  il.involuntary_lien_info.state_code AS State_Code, 
+  S.property_status_indicators.is_pace_lien AS Is_Pace_Lien
+FROM reporting.lkup_application la
+LEFT JOIN reporting.lkup_datatree_summary s ON s.application_uuid.value = la.application_uuid_value
+LEFT JOIN reporting.lkup_datatree_involuntary_liens il ON il.application_uuid.value = la.application_uuid_value),
+
+
+F1 AS (
+SELECT 
+*
+FROM( SELECT 
+  *,
+   CASE WHEN Involuntary_Lien_On_Property IS TRUE OR HOA_Lien_On_Property IS TRUE THEN 'YES' ELSE 'NO' END AS Involuntary_Lien_Exists,
+   CASE WHEN (FICO >= 680 AND (Document_Category = 'NOTICE' AND Document_Description = 'NOTICE') AND Is_Pace_Lien IS FALSE) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception1_Exists,
+   CASE WHEN (Document_Category = 'FEDERAL TAX LIEN' AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 120) IS TRUE
+    OR
+    (Document_Category = 'MECHANICS LIEN' AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 24) IS TRUE
+    OR
+    (Document_Category = 'STATE TAX LIEN' AND State_Code IN('NH', 'IL', 'CA', 'NJ', 'VA', 'WI', 'FL', 'HI', 'CT', 'OH', 'VT', 'IA', 'KY', 'LA', 'MD') AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 240) IS TRUE
+    OR 
+    (Document_Category = 'STATE TAX LIEN' AND State_Code IN( 'AL', 'AZ', 'AR', 'DE', 'IN', 'ME', 'MA', 'MN', 'NM', 'TN', 'WA', 'WY', 'WV', 'KS', 'SC', 'GA', 'OK', 'NE') AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 120) IS TRUE
+    OR  
+    (Document_Category = 'STATE TAX LIEN' AND State_Code IN( 'SD', 'UT', 'ID', 'CO', 'MI', 'MS') AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 84) IS TRUE
+    OR  
+    (Document_Category IN ('JUDGMENT', 'LIEN') AND State_Code IN( 'MD', 'DC', 'NM', 'KY', 'ME', 'MA', 'CT', 'NJ', 'RI') AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 240) IS TRUE
+    OR
+    (Document_Category IN ('JUDGMENT', 'LIEN') AND State_Code IN( 'AR', 'AL', 'IA','DE', 'IN', 'MN', 'TN', 'WA', 'WV', 'SC', 'CA', 'FL', 'VA', 'WI', 'SD', 'LA', 'TX', 'MT', 'NC', 'OR', 'MO', 'AZ', 'UT', 'VT', 'AK') AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 120) IS TRUE
+    OR 
+    (Document_Category IN ('JUDGMENT', 'LIEN') AND State_Code IN( 'WY', 'KS', 'OK', 'OH', 'ID', 'MI', 'PA', 'NE', 'NH', 'CO', 'NV', 'GA', 'IL', 'MI') AND DATE_DIFF( App_Created_Date, Document_Date, MONTH) > 84) IS TRUE THEN 'YES'
+    ELSE 'NO' END AS Exception2_Exists,  
+    
+  CASE WHEN (Document_Category IN ('FEDERAL TAX LIEN', 'MECHANICS LIEN', 'STATE TAX LIEN','JUDGMENT', 'LIEN') AND  Document_Date IS NOT NULL) THEN 'YES' ELSE 'NO' END AS Doc_Date_Exists,
+  App_UUID IN (SELECT DISTINCT(application_uuid_value) FROM rpt_staging.stg_uw_decline_reasons WHERE decline_reason_code = 'INV_TAXLIEN') AS App_Inv_Bool,
+  DATE_DIFF(App_Created_Date, Document_Date, Month) AS Date_Difference_By_Month
+FROM F0)),
+
+F2 AS (
+SELECT 
+  *,  
+   CASE
+   WHEN ((Involuntary_Lien_Exists = 'YES' AND (Exception1_Exists = 'NO' OR Exception2_Exists = 'NO' OR Doc_Date_Exists = 'NO') AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL)) AND App_Inv_Bool IS FALSE AND Decline_Reasons != 'Other: Involuntary lien'
+   AND App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE' THEN 'Involuntary_Lien_Knockout_Failure(DT returns)1'
+   WHEN ((Involuntary_Lien_Exists = 'YES' AND (Exception1_Exists = 'NO' OR Exception2_Exists = 'NO' OR Doc_Date_Exists = 'NO') AND Document_Category IS NULL AND Document_Description IS NULL)) AND App_Inv_Bool IS FALSE AND Decline_Reasons != 'Other: Involuntary lien' 
+   AND App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE' THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)1'
+   WHEN (Involuntary_Lien_Exists = 'NO' OR (Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'YES' AND Exception2_Exists = 'YES' AND Doc_Date_Exists = 'YES'  AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL ))AND App_Inv_Bool IS TRUE
+   AND Decline_Reasons = 'Other: Involuntary lien' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE' THEN 'Involuntary_Lien_Knockout_Failure(DT returns)2'
+   WHEN (Involuntary_Lien_Exists = 'NO' OR (Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'YES' AND Exception2_Exists = 'YES' AND Doc_Date_Exists = 'YES' AND Document_Category IS NULL AND Document_Description IS NULL )) AND App_Inv_Bool IS TRUE
+   AND Decline_Reasons = 'Other: Involuntary lien' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE'
+   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)2' ELSE 'PASS'
+  END AS Involuntary_Lien_Decline_Check
+ 
+FROM F1)
+
+SELECT * FROM F2
+WHERE Involuntary_Lien_Decline_Check != 'PASS'
+ORDER BY App_Created_Date DESC
