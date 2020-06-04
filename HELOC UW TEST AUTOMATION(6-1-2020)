@@ -140,28 +140,28 @@ SELECT
  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'NOTICE' AND il.involuntary_lien_info.involuntary_lien_item.document_description = 'NOTICE') 
   AND ls.property_status_indicators.is_pace_lien IS FALSE) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception1_Exists, 
   CASE WHEN 
-  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'FEDERAL TAX LIEN' AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'FEDERAL TAX LIEN' AND DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
   OR
-  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'MECHANICS LIEN' AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 24) IS TRUE
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'MECHANICS LIEN' AND DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 24) IS TRUE
   OR
-  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('NH', 'IL', 'CA', 'NJ', 'VA', 'WI', 'FL', 'HI', 'CT', 'OH', 'VT', 'IA', 'KY', 'LA', 'MD') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 240) IS TRUE
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('NH', 'IL', 'CA', 'NJ', 'VA', 'WI', 'FL', 'HI', 'CT', 'OH', 'VT', 'IA', 'KY', 'LA', 'MD') AND DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 240) IS TRUE
   OR 
-  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('AL', 'AZ', 'AR', 'DE', 'IN', 'ME', 'MA', 'MN', 'NM', 'TN', 'WA', 'WY', 'WV', 'KS', 'SC', 'GA', 'OK', 'NE') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('AL', 'AZ', 'AR', 'DE', 'IN', 'ME', 'MA', 'MN', 'NM', 'TN', 'WA', 'WY', 'WV', 'KS', 'SC', 'GA', 'OK', 'NE') AND DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
   OR  
-  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('SD', 'UT', 'ID', 'CO', 'MI', 'MS') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE
+  (il.involuntary_lien_info.involuntary_lien_item.document_category = 'STATE TAX LIEN' AND il.involuntary_lien_info.state_code IN('SD', 'UT', 'ID', 'CO', 'MI', 'MS') AND DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE
   OR  
-  (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('MD', 'DC', 'NM', 'KY', 'ME', 'MA', 'CT', 'NJ', 'RI') AND DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 240) IS TRUE
+  (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('MD', 'DC', 'NM', 'KY', 'ME', 'MA', 'CT', 'NJ', 'RI') AND DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 240) IS TRUE
   OR
   (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('AR', 'AL', 'IA','DE', 'IN', 'MN', 'TN', 'WA', 'WV', 'SC', 'CA', 'FL', 'VA', 'WI', 'SD', 'LA', 'TX', 'MT', 'NC', 'OR', 'MO', 'AZ', 'UT', 'VT', 'AK') AND 
-  DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
+  DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 120) IS TRUE
   OR 
   (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('JUDGMENT', 'LIEN') AND il.involuntary_lien_info.state_code IN('WY', 'KS', 'OK', 'OH', 'ID', 'MI', 'PA', 'NE', 'NH', 'CO', 'NV', 'GA', 'IL', 'MI')
   AND 
-  DATE_DIFF(Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception2_Exists, 
+  DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) > 84) IS TRUE THEN 'YES' ELSE 'NO' END AS Exception2_Exists, 
   
-  CASE WHEN (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('FEDERAL TAX LIEN', 'MECHANICS LIEN', 'STATE TAX LIEN','JUDGMENT', 'LIEN') AND  CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) IS NULL) THEN 'YES' ELSE 'NO' END AS Exception3_Exists,  
+  CASE WHEN (il.involuntary_lien_info.involuntary_lien_item.document_category IN ('FEDERAL TAX LIEN', 'MECHANICS LIEN', 'STATE TAX LIEN','JUDGMENT', 'LIEN') AND  CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE) IS NOT NULL) THEN 'YES' ELSE 'NO' END AS Doc_Date_Exists,  
   la.application_uuid_value IN (SELECT DISTINCT(application_uuid_value) FROM rpt_staging.stg_uw_decline_reasons WHERE decline_reason_code = 'INV_TAXLIEN') AS App_Inv_Bool,
-  DATE_DIFF( Current_Date, CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) AS Date_Difference_By_Month,  
+  DATE_DIFF( DATE(la.application_start_date), CAST(il.involuntary_lien_info.involuntary_lien_item.document_date.value AS DATE), MONTH) AS Date_Difference_By_Month,  
   la.pre_loan_cltv AS Pre_Loan_CLTV,
   la.Pre_Loan_Adj_CLTV,
   la.Pre_Loan_DTI,
@@ -391,17 +391,16 @@ FROM(SELECT
   WHEN COALESCE(Stated_Monthly_Income,0) != 0 AND  COALESCE(App_Term,0) != 0 THEN ROUND(T_Monthly_Debt/(Stated_Monthly_Income + (T_Total_Assets*0.04/12)/(1-POWER((1+0.04/12),(- App_Term*12)))),4) 
   WHEN COALESCE(Stated_Monthly_Income,0) != 0 AND COALESCE(App_Term,0) = 0 THEN ROUND(T_Monthly_Debt/Stated_Monthly_Income,4)
   END AS T_DTI,
-  CASE
-   WHEN ((Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO' AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL) OR Document_Date IS NULL) AND App_Inv_Bool IS FALSE AND Decline_Code != 'INV_TAXLIEN' AND (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE') 
-   THEN 'Involuntary_Lien_Knockout_Failure(DT returns)1'
-   WHEN ((Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'NO' AND Exception2_Exists = 'NO' AND Exception3_Exists = 'NO' AND Document_Category IS NULL AND Document_Description IS NULL) OR Document_Date IS NULL)  AND App_Inv_Bool IS FALSE  AND Decline_Code != 'INV_TAXLIEN' AND (App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE') 
-   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)1'
-   WHEN  ((Involuntary_Lien_Exists = 'NO' OR (Involuntary_Lien_Exists = 'YES' AND ((Exception1_Exists = 'YES' OR  Exception2_Exists = 'YES' OR Exception3_Exists = 'YES') AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL AND Document_Date IS NOT NULL))) AND App_Inv_Bool IS TRUE
-   AND Decline_Code = 'INV_TAXLIEN' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE') THEN 'Involuntary_Lien_Knockout_Failure(DT returns)2'
-   WHEN Involuntary_Lien_Exists = 'YES' AND ((Exception1_Exists = 'YES' OR Exception2_Exists = 'YES' OR Exception3_Exists = 'YES') AND Document_Category IS NULL AND Document_Description IS NULL AND Document_Date IS NOT NULL) AND App_Inv_Bool IS TRUE
-   AND Decline_Code = 'INV_TAXLIEN' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE'
-   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)2'
-   ELSE 'PASS'
+   CASE
+   WHEN ((Involuntary_Lien_Exists = 'YES' AND (Exception1_Exists = 'NO' OR Exception2_Exists = 'NO' OR Doc_Date_Exists = 'NO') AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL)) AND App_Inv_Bool IS FALSE AND Decline_Reason != 'Other: Involuntary lien'
+   AND App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE' THEN 'Involuntary_Lien_Knockout_Failure(DT returns)1'
+   WHEN ((Involuntary_Lien_Exists = 'YES' AND (Exception1_Exists = 'NO' OR Exception2_Exists = 'NO' OR Doc_Date_Exists = 'NO') AND Document_Category IS NULL AND Document_Description IS NULL)) AND App_Inv_Bool IS FALSE AND Decline_Reason != 'Other: Involuntary lien' 
+   AND App_Status NOT IN('CANCELLED','DECLINED') AND UW_Decision != 'DECLINE' THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)1'
+   WHEN (Involuntary_Lien_Exists = 'NO' OR (Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'YES' AND Exception2_Exists = 'YES' AND Doc_Date_Exists = 'YES'  AND Document_Category IS NOT NULL AND Document_Description IS NOT NULL ))AND App_Inv_Bool IS TRUE
+   AND Decline_Reason = 'Other: Involuntary lien' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE' THEN 'Involuntary_Lien_Knockout_Failure(DT returns)2'
+   WHEN (Involuntary_Lien_Exists = 'NO' OR (Involuntary_Lien_Exists = 'YES' AND Exception1_Exists = 'YES' AND Exception2_Exists = 'YES' AND Doc_Date_Exists = 'YES' AND Document_Category IS NULL AND Document_Description IS NULL )) AND App_Inv_Bool IS TRUE
+   AND Decline_Reason = 'Other: Involuntary lien' AND App_Status IN('CANCELLED','DECLINED') AND UW_Decision = 'DECLINE'
+   THEN 'Involuntary_Lien_Knockout_Failure(DT no returns)2' ELSE 'PASS'
   END AS Involuntary_Lien_Decline_Check
 FROM CP)
 ORDER BY App_Start_Date DESC, App_UUID),
